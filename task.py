@@ -1128,126 +1128,66 @@ class Sleep(Task):
 
 if __name__ == "__main__":
     def creative(txt: str):
+        now = datetime.datetime.now().strftime('%H:%M:%S.%f')
+        print(now, "creative: start")
         time.sleep(1)
         now = datetime.datetime.now().strftime('%H:%M:%S.%f')
         print(now, "creative:", txt)
 
     def gimmick(txt: str="wow"):
+        now = datetime.datetime.now().strftime('%H:%M:%S.%f')
+        print(now, "gimmick: start")
         time.sleep(3)
         now = datetime.datetime.now().strftime('%H:%M:%S.%f')
         print(now, "gimmick:",  txt)
 
     def administration():
+        now = datetime.datetime.now().strftime('%H:%M:%S.%f')
+        print(now, "administration: start")
         time.sleep(5)
         now = datetime.datetime.now().strftime('%H:%M:%S.%f')
         print(now, "administration: task and me, both done")
 
-    Task(
+    t1 = Task(
         creative,
         args=("heureka!",)
-    ).start()
-    Task(
+    )
+    t2 = Task(
         gimmick,
         kwargs={"txt": "my great application"}
-    ).start()
-    Task(
-        administration
-    ).start()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** start (parallel) ***")
-    
-    time.sleep(6)
-    print('-'*50)
-
-    seq = Task(
-        creative,
-        args=("heureka!",)
-    ).append(
-        Task(
-            gimmick,
-            kwargs={"txt": "my great application"}
-        )
-    ).append(
-        Task(
-            administration
-        )
     )
-    seq.start()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** start (sequential) ***")
+    t3 = Task(
+        administration
+    )
 
-    time.sleep(2)
-    seq.stop()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** stop (sequential) ***")
-    seq.cont()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** cont (sequential) ***")
+    concat(
+        Task(t1.start),
+        Task(t2.start),
+        Task(t3.start)
+    ).start().join()
+    print("*** done (parallel) ***")
+
+    t = concat(
+        t1,
+        Sleep(3),
+        t2,
+        Sleep(3),
+        t3
+    )
+    t.start().join()
+    print("*** done (sequential) ***")
+
+    t.start()
+    time.sleep(5)
+    t.stop()
+    print("*** stopped ***")
+    time.sleep(5)
+    t.cont()
+    print("*** continued ***")
+    t.join()
+    print("*** done (after continuing) ***")
+
+    Repeated(t.start, num=2).start().join()
+    print("*** done (two times) ***")
     
-    time.sleep(8)
-    print('-'*50)
-
-    seq.start()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** start (sequential) ***")
-
-    time.sleep(2)
-    seq.stop()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** stop (sequential) ***")
-    seq.cont(gap=4)
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** cont (sequential) with gap=4 ***")
-
-    time.sleep(10)
-    print('-'*50)
-
-    def r1():
-        now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-        print(now, "repeated")
-        return 1
-
-    rep = Repeated(r1, num=10)
-    rep.start()
-    time.sleep(2)
-    rep.stop()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** stop Repeated ***")
-    time.sleep(2)
-    rep.cont()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** cont Repeated ***")
-
-    time.sleep(8)
-    print('-'*50)
-
-    rep.start()
-    time.sleep(2)
-    rep.stop()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** stop Repeated ***")
-    rep.cont()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** cont Repeated ***")
-
-    time.sleep(11)
-    print('-'*50)
-
-    rep.start()
-    time.sleep(2)
-    rep.stop()
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** stop Repeated ***")
-    time.sleep(2)
-    rep.cont(gap=4)
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** cont Repeated with gap=4 ***")
-
-    time.sleep(12)
-    print('-'*50)
-
-    def action():
-        result = 1.0 / 0.0
-    t = Task(action, exc=rep.exc)
-    rep.start()
-    t.start(gap=3) 
+    
