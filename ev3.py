@@ -1225,7 +1225,7 @@ if __name__ == "__main__":
     pos_color = 0
 
     def next_color():
-        global my_ev3, led_sequence, pos_color
+        global pos_color
         ops = b''.join([
             opUI_Write,
             LED,
