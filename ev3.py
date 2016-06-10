@@ -944,41 +944,41 @@ class EV3:
 
     def __init__(self, protocol: str=None, host: str=None, ev3_obj=None):
         """
-        tries to establish a connection to a LEGO EV3
-        protocol can be:
-          - BLUETOOTH = 'B'
-          - USB = 'U'
-          - WIFI = 'W'
-        host is the mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
-        ev3_obj may be an existing EV3 object, its connections will be used
+        Establish a connection to a LEGO EV3 device
+
+        Arguments (either protocol and host or ev3_obj):
+        protocol:
+          BLUETOOTH == 'B'
+          USB == 'U'
+          WIFI == 'W'
+        host: mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
+        ev3_obj: an existing EV3 object (its connections will be used)
         """
+        assert ev3_obj or protocol, \
+            'Either protocol or ev3_obj needs to be given'
         if ev3_obj:
-            if not isinstance(ev3_obj, EV3):
-                raise ValueError("ev3_obj needs to be instance of EV3")
+            assert isinstance(ev3_obj, EV3), \
+                'ev3_obj needs to be instance of EV3'
             self._protocol = ev3_obj._protocol
             self._device = ev3_obj._device
             self._socket = ev3_obj._socket
             self._foreign = ev3_obj._foreign
             self._msg_cnt = ev3_obj._msg_cnt
         elif protocol:
+            assert protocol in [BLUETOOTH, WIFI, USB], \
+                'Protocol ' + protocol + 'is not valid'
             self._protocol = None
             self._device = None
             self._socket = None
             if protocol == BLUETOOTH:
-                if not host:
-                    raise ValueError('Protocol ' + protocol + 'needs host-id')
+                assert host, 'Protocol ' + protocol + 'needs host-id'
                 self._connect_bluetooth(host)
             elif protocol == WIFI:
                 self._connect_wifi()
             elif protocol == USB:
                 self._connect_usb()
-            else:
-                raise ValueError('Protocol ' + protocol + 'is not valid')
             self._foreign = ForeignReplies()
             self._msg_cnt = MessageCounter()
-        else:
-            raise ValueError('Either protocol or ev3_obj needs to be given')
-            
         self._verbosity = 0
         self._sync_mode = STD
         self._return_ops = False
@@ -987,6 +987,7 @@ class EV3:
     def sync_mode(self):
         """
         sync mode (standard, asynchronous, synchronous)
+
         STD = 0:   Use DIRECT_COMMAND_REPLY if global_mem > 0,
                    wait for reply if there is one.
         ASYNC = 1: Use DIRECT_COMMAND_REPLY if global_mem > 0,
@@ -1023,20 +1024,6 @@ class EV3:
         if value < 0 or value > 2:
             raise ValueError("allowed verbosity values are: 0, 1 or 2")
         self._verbosity = value
-
-    @property
-    def return_ops(self) -> bool:
-        """
-        Never send direct commands, always return the operations,
-        it's the task of the calling program to call send_direct_cmd.
-        """
-        return self._return_ops
-
-    @return_ops.setter
-    def return_ops(self, value:bool):
-        if not isinstance(value, bool):
-            raise ValueError("return_ops needs to be of type bool")
-        self._return_ops = value
 
     def __del__(self):
         """
@@ -1142,16 +1129,23 @@ class EV3:
                         local_mem: int = 0,
                         global_mem: int = 0) -> bytes:
         """
-        send a direct command to the LEGO EV3
-        ops holds netto data only (operations), the following fields are added:
+        Send a direct command to the LEGO EV3
+
+        Arguments:
+        ops: holds netto data only (operations), the following fields are added:
           - length: 2 bytes, little endian
           - counter: 2 bytes, little endian
           - type: 1 byte, DIRECT_COMMAND_REPLY or DIRECT_COMMAND_NO_REPLY
           - header: 2 bytes, holds sizes of local and global memory
-        returns 
-            sync_mode = STD: reply or message counter
+        
+        Keyword Arguments:
+        local_mem: size of the local memory
+        global_mem: size of the global memory
+
+        Returns: 
+            sync_mode = STD: reply (if global_mem > 0) or message counter
             sync_mode = ASYNC: message counter
-            sync_mode = SYNC: reply of the LEGO EV3,
+            sync_mode = SYNC: reply of the LEGO EV3
         """
         cmd = self._complete_direct_cmd(ops, local_mem, global_mem)
         if self._verbosity >= 1:
@@ -1180,9 +1174,13 @@ class EV3:
 
     def wait_for_reply(self, counter: bytes) -> bytes:
         """
-        ask the LEGO EV3 for a reply and wait until it is received
-        counter is the message counter of the corresponding send_direct_cmd
-        returns the reply
+        Ask the LEGO EV3 for a reply and wait until it is received
+
+        Arguments:
+        counter: is the message counter of the corresponding send_direct_cmd
+        
+        Returns:
+        reply to the direct command
         """
         self._lock.acquire()
         if counter:
@@ -1220,30 +1218,27 @@ class EV3:
                 return reply[:global_mem + 5]
 
 if __name__ == "__main__":
-    led_sequence = [LED_RED, LED_GREEN]
-    pos_color = 0
-
-    def next_color(ev3):
-        global led_sequence, pos_color
-        ops = opUI_Write + \
-              LED + \
-              led_sequence[pos_color]
-        ev3.send_direct_cmd(ops)
-        pos_color += 1
-        pos_color %= len(led_sequence)
-
     my_ev3 = EV3(protocol=BLUETOOTH, host='00:16:53:42:2B:99')
     my_ev3.verbosity = 1
 
-    now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** ASYNC ***")
-    next_color(my_ev3)
-    time.sleep(1)
-    next_color(my_ev3)
-    time.sleep(1)
-    next_color(my_ev3)
-    time.sleep(1)
-    next_color(my_ev3)
+    led_sequence = [LED_RED, LED_GREEN, LED_ORANGE, LED_GREEN]
+    pos_color = 0
+
+    def next_color():
+        global my_ev3, led_sequence, pos_color
+        ops = b''.join([
+            opUI_Write,
+            LED,
+            led_sequence[pos_color]
+        ])
+        my_ev3.send_direct_cmd(ops)
+        pos_color += 1
+        pos_color %= len(led_sequence)
+
+    print("*** change colors ***")
+    for i in range(8):
+        next_color()
+        time.sleep(1)
 
     ops = opNop
 
@@ -1253,8 +1248,9 @@ if __name__ == "__main__":
 
     print("*** ASYNC ***")
     my_ev3.sync_mode = ASYNC
-    anz = 20
-    for i in range(anz):
+    counter_first = my_ev3.send_direct_cmd(ops, global_mem=1)
+    for i in range(10):
         counter = my_ev3.send_direct_cmd(ops, global_mem=1)
     my_ev3.wait_for_reply(counter)
+    my_ev3.wait_for_reply(counter_first)
     print("*** finished ***")
