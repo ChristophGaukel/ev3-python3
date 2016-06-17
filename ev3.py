@@ -15,23 +15,19 @@ import time
 import datetime
 import numbers, collections
 
-WIFI      = 'W'                      
-BLUETOOTH = 'B'
-USB       = 'U'
+WIFI      = 'Wifi'                      
+BLUETOOTH = 'Bluetooth'
+USB       = 'Usb'
 
-STD       = 0                         # reply if global_mem, wait for reply
-ASYNC     = 1                         # reply if global_mem, never wait for reply
-SYNC      = 2                         # always with reply, always wait for reply
+STD       = 'STD'                     # reply if global_mem, wait for reply
+ASYNC     = 'ASYNC'                   # reply if global_mem, never wait for reply
+SYNC      = 'SYNC'                    # always with reply, always wait for reply
 
 _ID_VENDOR_LEGO = 0x0694              # Usb-Identification of the device
 _ID_PRODUCT_EV3 = 0x0005
 
 _EP_IN  = 0x81                        # Usb-Endpoints
 _EP_OUT = 0x01
-
-WIFI      = 'W'
-BLUETOOTH = 'B'
-USB       = 'U'
 
 _DIRECT_COMMAND_REPLY     = b'\x00'
 _DIRECT_COMMAND_NO_REPLY  = b'\x80'
@@ -946,13 +942,10 @@ class EV3:
         """
         Establish a connection to a LEGO EV3 device
 
-        Arguments (either protocol and host or ev3_obj):
-        protocol:
-          BLUETOOTH == 'B'
-          USB == 'U'
-          WIFI == 'W'
-        host: mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
-        ev3_obj: an existing EV3 object (its connections will be used)
+        Keyword Arguments (either protocol and host or ev3_obj):
+        protocol: None, 'Bluetooth', 'Usb' or 'Wifi'
+        host: None or mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
+        ev3_obj: None or an existing EV3 object (its connections will be used)
         """
         assert ev3_obj or protocol, \
             'Either protocol or ev3_obj needs to be given'
@@ -981,34 +974,33 @@ class EV3:
             self._msg_cnt = MessageCounter()
         self._verbosity = 0
         self._sync_mode = STD
-        self._return_ops = False
 
     @property
-    def sync_mode(self):
+    def sync_mode(self) -> str:
         """
         sync mode (standard, asynchronous, synchronous)
 
-        STD = 0:   Use DIRECT_COMMAND_REPLY if global_mem > 0,
-                   wait for reply if there is one.
-        ASYNC = 1: Use DIRECT_COMMAND_REPLY if global_mem > 0,
-                   never wait for reply (it's the task of the calling program).
-        SYNC = 2:  Always use DIRECT_COMMAND_REPLY and wait for reply.
+        STD:   Use DIRECT_COMMAND_REPLY if global_mem > 0,
+               wait for reply if there is one.
+        ASYNC: Use DIRECT_COMMAND_REPLY if global_mem > 0,
+               never wait for reply (it's the task of the calling program).
+        SYNC:  Always use DIRECT_COMMAND_REPLY and wait for reply.
 
         The general idea is:
-        STD:   EV3 device is never blocked,
+        ASYNC: Interruption or EV3 device queues direct commands,
                control directly comes back.
-        ASYNC: EV3 device queues direct commands,
-               control directly comes back.
-        SYNC:  EV3 device is blocked until direct command is finished.
-               control comes back, when direct command is finished               
+        SYNC:  EV3 device is blocked until direct command is finished,
+               control comes back, when direct command is finished.               
+        STD:   NO_REPLY like ASYNC with interruption or EV3 queuing,
+               REPLY like SYNC, synchronicity of program and EV3 device.
         """
         return self._sync_mode
     @sync_mode.setter
-    def sync_mode(self, value:int):
-        if not isinstance(value, int):
-            raise ValueError("sync_mode needs to be of type int")
-        if not value in [SYNC, ASYNC]:
-            raise ValueError("value of sync_mode is invalid")
+    def sync_mode(self, value: str):
+        assert isinstance(value, str), \
+            "sync_mode needs to be of type str"
+        assert value in [STD, SYNC, ASYNC], \
+            "value of sync_mode: " + value + " is invalid"
         self._sync_mode = value
 
     @property
@@ -1019,18 +1011,17 @@ class EV3:
         return self._verbosity
     @verbosity.setter
     def verbosity(self, value:int):
-        if not isinstance(value, int):
-            raise ValueError("verbosity needs to be of type int")
-        if value < 0 or value > 2:
-            raise ValueError("allowed verbosity values are: 0, 1 or 2")
+        assert isinstance(value, int), \
+            "verbosity needs to be of type int"
+        assert value >= 0 and value <= 2, \
+            "allowed verbosity values are: 0, 1 or 2"
         self._verbosity = value
 
     def __del__(self):
         """
         closes the connection to the LEGO EV3
         """
-        if     self._protocol == BLUETOOTH \
-            or self._protocol == WIFI:
+        if self._protocol in [BLUETOOTH, WIFI]:
             self._socket.close()
 
     def _connect_bluetooth(self, host: str) -> int:
@@ -1133,19 +1124,19 @@ class EV3:
 
         Arguments:
         ops: holds netto data only (operations), the following fields are added:
-          - length: 2 bytes, little endian
-          - counter: 2 bytes, little endian
-          - type: 1 byte, DIRECT_COMMAND_REPLY or DIRECT_COMMAND_NO_REPLY
-          - header: 2 bytes, holds sizes of local and global memory
+          length: 2 bytes, little endian
+          counter: 2 bytes, little endian
+          type: 1 byte, DIRECT_COMMAND_REPLY or DIRECT_COMMAND_NO_REPLY
+          header: 2 bytes, holds sizes of local and global memory
         
         Keyword Arguments:
         local_mem: size of the local memory
         global_mem: size of the global memory
 
         Returns: 
-            sync_mode = STD: reply (if global_mem > 0) or message counter
-            sync_mode = ASYNC: message counter
-            sync_mode = SYNC: reply of the LEGO EV3
+          sync_mode is STD: reply (if global_mem > 0) or message counter
+          sync_mode is ASYNC: message counter
+          sync_mode is SYNC: reply of the LEGO EV3
         """
         cmd = self._complete_direct_cmd(ops, local_mem, global_mem)
         if self._verbosity >= 1:
@@ -1158,10 +1149,9 @@ class EV3:
                   ':'.join('{:02X}'.format(byte) for byte in cmd[5:7]) + '|' + \
                   ':'.join('{:02X}'.format(byte) for byte in cmd[7:]) + '|' \
             )
-        if    self._protocol == BLUETOOTH \
-           or self._protocol == WIFI:
+        if self._protocol in [BLUETOOTH, WIFI]:
             self._socket.send(cmd)
-        elif self._protocol == USB:
+        elif self._protocol is USB:
             self._device.write(_EP_OUT, cmd, 100)
         else:
             raise RuntimeError('No EV3 connected')
@@ -1189,8 +1179,7 @@ class EV3:
                 self._lock.release()
                 return reply
         while True:
-            if    self._protocol == BLUETOOTH \
-               or self._protocol == WIFI:
+            if self._protocol in [BLUETOOTH, WIFI]:
                 reply = self._socket.recv(1024)
             else:
                 reply = bytes(self._device.read(_EP_IN, 1024, 0))

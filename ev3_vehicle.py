@@ -19,24 +19,30 @@ class TwoWheelVehicle(ev3.EV3):
 
     # pylint: disable=too-many-instance-attributes
 
-    def __init__(self, radius_wheel: float, tread: float,
-                 protocol: str=None,
-                 host: str=None,
-                 ev3_obj: ev3.EV3=None):
+    def __init__(
+            self,
+            radius_wheel: float,
+            tread: float,
+            protocol: str=None,
+            host: str=None,
+            ev3_obj: ev3.EV3=None
+    ):
         """
-        tries to establish a connection to a LEGO EV3
-        Radius_wheel: radius of the wheels im meter
+        Establish a connection to a LEGO EV3 device
+
+        Arguments:
+        radius_wheel: radius of the wheels im meter
         tread: the vehicles tread in meter
-        protocol can be:
-          - BLUETOOTH = 'B'
-          - USB = 'U'
-          - WIFI = 'W'
-        host is the mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
-        ev3_obj may be an existing EV3 object, its connections will be used
+
+        Keyword Arguments (either protocol and host or ev3_obj):
+        protocol
+          BLUETOOTH == 'Bluetooth'
+          USB == 'Usb'
+          WIFI == 'Wifi'
+        host: mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
+        ev3_obj: an existing EV3 object (its connections will be used)
         """
-        super().__init__(protocol=protocol,
-                         host=host,
-                         ev3_obj=ev3_obj)
+        super().__init__(protocol=protocol, host=host, ev3_obj=ev3_obj)
         self._radius_wheel = radius_wheel
         self._tread = tread
         self._polarity = 1
@@ -96,14 +102,14 @@ class TwoWheelVehicle(ev3.EV3):
     @property
     def x(self):
         """
-        actual position in x-direction in meter
+        actual x-component of the position in meter
         """
         return self._x
 
     @property
     def y(self):
         """
-        actual position in y-direction in meter
+        actual y-component of the position in meter
         """
         return self._y
 
@@ -118,7 +124,7 @@ class TwoWheelVehicle(ev3.EV3):
 
     def _reaction(self):
         if self._protocol == ev3.BLUETOOTH:
-            return 0.00
+            return 0.04
         elif self._protocol == ev3.WIFI:
             return 0.02
         else:
@@ -272,17 +278,40 @@ class TwoWheelVehicle(ev3.EV3):
     def move(self, speed: int, turn: int) -> None:
         """
         Start unlimited movement of the vehicle
+
+        Arguments:
+        speed: speed in percent [-100 - 100]
+          > 0: foreward
+          < 0: backward
+        turn: type of turn [-200 - 200]
+          -200: circle right on place
+          -100: turn right with unmoved right wheel
+           0  : straight
+           100: turn left with unmoved left wheel
+           200: circle left on place
         """
         assert self._sync_mode != ev3.SYNC, 'no unlimited operations allowed in sync_mode SYNC'
         assert isinstance(speed, int), "speed needs to be an integer value"
         assert -100 <= speed and speed <= 100, "speed needs to be in range [-100 - 100]"
         assert isinstance(turn, int), "turn needs to be an integer value"
         assert -200 <= turn and turn <= 200, "turn needs to be in range [-200 - 200]"
-        if self._polarity == -1:
+        # if self._polarity_left is -1:
+        #     if turn >= 0:
+        #         turn = 200 - turn
+        #     else:
+        #         turn = -200 - turn
+        #         speed *= -1
+        # if self._polarity_right is -1:
+        #     if turn >= 0:
+        #         turn = 200 - turn
+        #         speed *= -1
+        #     else:
+        #         turn = -200 - turn
+        if self._polarity is -1:
             speed *= -1
         if self._port_left < self._port_right:
             turn *= -1
-        ops_start = b''.join([
+        ops = b''.join([
             ev3.opOutput_Step_Sync,
             ev3.LCX(0),                                  # LAYER
             ev3.LCX(self._port_left + self._port_right), # NOS
@@ -294,7 +323,7 @@ class TwoWheelVehicle(ev3.EV3):
             ev3.LCX(0),                                  # LAYER
             ev3.LCX(self._port_left + self._port_right)  # NOS
         ])
-        reply = self.send_direct_cmd(ops_start + self._ops_pos(), global_mem=8)
+        reply = self.send_direct_cmd(ops + self._ops_pos(), global_mem=8)
         pos = struct.unpack('<ii', reply[5:])
         if self._port_left < self._port_right:
             turn *= -1
@@ -306,55 +335,109 @@ class TwoWheelVehicle(ev3.EV3):
     def stop(self, brake: bool=False) -> None:
         """
         Stop movement of the vehicle
+
+        Arguments:
+        brake: flag if activating brake 
         """
         assert isinstance(brake, bool), "brake needs to be a boolean value"
         if brake:
             br = 1
         else:
             br = 0
-        ops_stop = b''.join([
+        ops = b''.join([
             ev3.opOutput_Stop,
             ev3.LCX(0),                                  # LAYER
             ev3.LCX(self._port_left + self._port_right), # NOS
             ev3.LCX(br)                                  # BRAKE
         ])
-        reply = self.send_direct_cmd(ops_stop + self._ops_pos(), global_mem=8)
+        reply = self.send_direct_cmd(ops + self._ops_pos(), global_mem=8)
         pos = struct.unpack('<ii', reply[5:])
         self._update(pos)
         self._moves = False
 
-    def move_straight(self, speed: int) -> None:
+    def drive_straight(self, speed: int, distance: float=None) -> None:
         """
-        Start unlimited straight movement of the vehicle
+        Drive the vehicle straight foreward or backward.
+
+        Attributes:
         speed: in percent [-100 - 100] (direction depends on its sign)
             positive sign: forwards
             negative sign: backwards
+
+        Keyword Attributes:
+        distance: in meter, needs to be positive
+                  if None, unlimited movement
         """
-        assert isinstance(speed, int), "speed needs to be an integer value"
-        assert -100 <= speed and speed <= 100, "speed needs to be in range [-100 - 100]"
+        assert distance is None or isinstance(distance, numbers.Number), \
+            "distance needs to be a number"
+        assert distance is None or distance > 0, "distance needs to be positive"
+        t = self.task_factory(
+            DRIVE_TYPE_STRAIGHT,
+            speed=speed,
+            distance=distance
+        )
+        if distance is None:
+            t.start()
+        else:
+            t.start().join()
+
+    def _drive_straight(self, speed: int, distance: float) -> None:
         self.move(speed, 0)
-            
-    def move_turn(
-            self,
-            speed: int,
-            radius_turn: numbers.Number,
-            right_turn: bool=False
+        if distance != None:
+            step = round(distance * 360 / (2 * math.pi * self._radius_wheel))
+            direction = math.copysign(1, speed * self._polarity)
+            final_pos = [self._pos[0] + direction * step,
+                         self._pos[1] + direction * step]
+            self._test_args = (direction, final_pos)
+
+    def drive_turn(
+        self,
+        speed: int,
+        radius_turn: float,
+        angle: float=None,
+        right_turn: bool=False
     ) -> None:
         """
-        Start unlimited turn movement.
+        Drive the vehicle a turn with given radius.
+
+        Attributes:
         speed: in percent [-100 - 100] (direction depends on its sign)
             positive sign: forwards
             negative sign: backwards
         radius_turn: in meter
             positive sign: turn to the left side
             negative sign: turn to the right side
+
+        Keyword Attributes:
+        angle: absolute angle (needs to be positive)
+               if None, unlimited movement
         right_turn: flag of turn right (only in case of radius_turn == 0)
         """
-        assert isinstance(speed, int), "speed needs to be an integer value"
-        assert -100 <= speed and speed <= 100, "speed needs to be in range [-100 - 100]"
         assert isinstance(radius_turn, numbers.Number), "radius_turn needs to be a number"
         assert isinstance(right_turn, bool), "right_turn needs to be a boolean"
         assert not right_turn or radius_turn == 0, "right_turn only can be set, when turning on place"
+        assert angle is None or isinstance(angle, numbers.Number), \
+            "angle needs to be a number"
+        assert angle is None or angle > 0, "angle needs to be positive"
+        t = self.task_factory(
+            DRIVE_TYPE_TURN,
+            speed=speed,
+            radius_turn=radius_turn,
+            angle=angle,
+            right_turn=right_turn
+        )
+        if angle is None:
+            t.start()
+        else:
+            t.start().join()
+
+    def _drive_turn(
+        self,
+        speed: int,
+        radius_turn: float,
+        angle: float,
+        right_turn: bool
+    ) -> None:
         rad_right = radius_turn + 0.5 * self._tread
         rad_left = radius_turn - 0.5 * self._tread
         if radius_turn >= 0 and not right_turn:
@@ -364,79 +447,19 @@ class TwoWheelVehicle(ev3.EV3):
         if turn == 0:
             raise ValueError("radius_turn is too large")
         self.move(speed, turn)
-
-    def drive_straight(self, speed: int, distance: float) -> None:
-        """
-        Drive the vehicle the given distance straight foreward or backward.
-        speed: in percent [-100 - 100] (direction depends on its sign)
-            positive sign: forwards
-            negative sign: backwards
-        distance: in meter, needs to be positive
-        """
-        assert isinstance(distance, numbers.Number), "distance needs to be a number"
-        assert distance > 0, "distance needs to be positive"
-        self.task_factory(
-            DRIVE_TYPE_STRAIGHT,
-            speed,
-            distance=distance
-        ).start().join()
-
-    def _drive_straight(self, speed: int, distance: float) -> None:
-        self.move_straight(speed)
-        step = round(distance * 360 / (2 * math.pi * self._radius_wheel))
-        direction = math.copysign(1, speed * self._polarity)
-        final_pos = [self._pos[0] + direction * step,
-                     self._pos[1] + direction * step]
-        self._test_args = (direction, final_pos)
-
-    def drive_turn(
-        self,
-        speed: int,
-        radius_turn: float,
-        angle: float,
-        right_turn: bool=False
-    ) -> None:
-        """
-        Drive the vehicle a turn with given radius and angle.
-        speed: in percent [-100 - 100] (direction depends on its sign)
-            positive sign: forwards
-            negative sign: backwards
-        radius_turn: in meter
-            positive sign: turn to the left side
-            negative sign: turn to the right side
-        angle: absolute angle (needs to be positive)
-        right_turn: flag of turn right (only in case of radius_turn == 0)
-        """
-        assert isinstance(angle, numbers.Number), "angle needs to be a number"
-        assert angle > 0, "angle needs to be positive"
-        self.task_factory(
-            DRIVE_TYPE_TURN,
-            speed,
-            radius_turn=radius_turn,
-            angle=angle,
-            right_turn=right_turn
-        ).start().join()
-
-    def _drive_turn(
-        self,
-        speed: int,
-        radius_turn: float,
-        angle: float,
-        right_turn: bool=False
-    ) -> None:
-        self.move_turn(speed, radius_turn, right_turn=right_turn)
-        step_outer = self._polarity * angle * (radius_turn + 0.5 * self._tread) / self._radius_wheel
-        step_inner = self._polarity * angle * (radius_turn - 0.5 * self._tread) / self._radius_wheel
-        if radius_turn >= 0 and not right_turn:
-            direction = math.copysign(1, speed)
-            final_pos = [self._pos[0] + direction * step_inner,
-                         self._pos[1] + direction * step_outer]
-        else:
-            direction = - math.copysign(1, speed)
-            final_pos = [self._pos[0] - direction * step_outer,
-                         self._pos[1] - direction * step_inner]
-        final_o = self._o + direction * angle
-        self._test_args = (direction, final_o, final_pos)
+        if angle != None:
+            step_outer = self._polarity * angle * rad_right / self._radius_wheel
+            step_inner = self._polarity * angle * rad_left / self._radius_wheel
+            if radius_turn >= 0 and not right_turn:
+                direction = math.copysign(1, speed)
+                final_pos = [self._pos[0] + direction * step_inner,
+                             self._pos[1] + direction * step_outer]
+            else:
+                direction = - math.copysign(1, speed)
+                final_pos = [self._pos[0] - direction * step_outer,
+                             self._pos[1] - direction * step_inner]
+            final_o = self._o + direction * angle
+            self._test_args = (direction, final_o, final_pos)
 
     def rotate_to(self, speed: int, o: float) -> None:
         """
@@ -447,7 +470,7 @@ class TwoWheelVehicle(ev3.EV3):
         assert isinstance(o, numbers.Number), "o needs to be a number"
         self.task_factory(
             DRIVE_TYPE_ROTATE_TO,
-            speed,
+            speed=speed,
             orientation=o
         ).start().join()
 
@@ -482,6 +505,13 @@ class TwoWheelVehicle(ev3.EV3):
     ) -> None:
         """
         Drive the vehicle to the given position.
+
+        Attributes:
+        speed: in percent [-100 - 100] (direction depends on its sign)
+            positive sign: forwards
+            negative sign: backwards
+        x: x-coordinate of target position
+        y: y-coordinate of target position
         """
         assert isinstance(speed, int), "speed needs to be an integer value"
         assert -100 <= speed and speed <= 100, "speed needs to be in range [-100 - 100]"
@@ -489,7 +519,7 @@ class TwoWheelVehicle(ev3.EV3):
         assert isinstance(y, numbers.Number), "y needs to be a number"
         self.task_factory(
             DRIVE_TYPE_DRIVE_TO,
-            speed,
+            speed=speed,
             pos_x=x,
             pos_y=y
         ).start().join()
@@ -507,7 +537,7 @@ class TwoWheelVehicle(ev3.EV3):
             direct = math.degrees(math.atan(diff_y/diff_x))
         else:
             fract = diff_x / diff_y
-            sign = math.copysign(1.0, fract)
+            sign = math.copysign(1, fract)
             direct = sign * 90 - math.degrees(math.atan(fract))
         if diff_x < 0:
             direct += 180
@@ -524,20 +554,46 @@ class TwoWheelVehicle(ev3.EV3):
         dist = math.sqrt(diff_x**2 + diff_y**2)
         self._drive_straight(speed, dist)
 
-    def task_factory(
-            self,
-            drive_type: str,
-            speed: int=None,
-            distance: float=None,
-            radius_turn: float=None,
-            angle: float=None,
-            right_turn: bool=False,
-            orientation: float=None,
-            pos_x: float=None,
-            pos_y: float=None,
-            brake: bool=False,
-            exc: task.ExceptionHandler=None
-    ) -> task.Task:
+    def task_factory(self, drive_type: str, **kwargs) -> task.Task:
+        """
+        Returns as Task object, which moves or stops the vehicle
+
+        Arguments:
+        drive_type: type of movement
+          'straight':  keyword arguments are speed,
+                       distance (optional for delimited movements)
+          'turn':      keyword arguments are speed, radius_turn,
+                       angle (optional for delimited movements),
+                       right_turn (optional for turns on place)
+          'stop':      keyword argument is brake (optional)
+          'rotate_to': keyword arguments are speed, orientation
+          'drive_to':  keyword arguments are speed, pos_x, pos_y
+
+        Keyword Arguments:
+        speed: int=None -- speed in percent [-100 - 100] (direction depends on its sign)
+            positive sign: forwards
+            negative sign: backwards
+        distance: float=None -- distance in meter, needs to be positive
+        radius_turn: float=None -- radius of turn in meter
+            positive sign: turn to the left side
+            negative sign: turn to the right side
+        angle: float=None -- absolute angle (needs to be positive)
+        right_turn: bool=False -- flag if turn right (only in case of radius_turn == 0)
+        pos_x: float=None -- x-component of position in meter
+        pos_y: float=None -- y-component of position in meter
+        brake: bool=False -- flag if stopping with activated brake
+        exc: ExceptionHandler=None -- exception handler to coordinate exceptions
+        """
+        speed = kwargs.pop('speed', None)
+        distance = kwargs.pop('distance', None)
+        radius_turn = kwargs.pop('radius_turn', None)
+        angle = kwargs.pop('angle', None)
+        right_turn = kwargs.pop('right_turn', False)
+        orientation = kwargs.pop('orientation', None)
+        pos_x = kwargs.pop('pos_x', None)
+        pos_y = kwargs.pop('pos_y', None)
+        brake = kwargs.pop('brake', False)
+        exc = kwargs.pop('exc', None)
         assert isinstance(drive_type, str), 'drive_type needs to be a str type'
         assert drive_type in [
             DRIVE_TYPE_STRAIGHT,
@@ -546,47 +602,62 @@ class TwoWheelVehicle(ev3.EV3):
             DRIVE_TYPE_DRIVE_TO,
             DRIVE_TYPE_STOP
         ], 'unknown drive_type: ' + drive_type
-        assert speed is None or isinstance(speed, int), 'speed needs to be an integer'
-        assert drive_type is DRIVE_TYPE_STOP or isinstance(speed, int), drive_type + ' needs parameter speed'
-        assert distance is None or isinstance(distance, numbers.Number), "distance needs to be a number"
-        assert radius_turn is None or isinstance(radius_turn, numbers.Number), "radius_turn needs to be a number"
-        assert angle is None or isinstance(angle, numbers.Number), "angle needs to be a number"
-        assert isinstance(right_turn, bool), "right_turn needs to be a bool value"
-        assert orientation is None or isinstance(orientation, numbers.Number), "orientation needs to be a number"
-        assert pos_x is None or isinstance( pos_x, numbers.Number), " pos_x needs to be a number"
-        assert pos_y is None or isinstance( pos_y, numbers.Number), " pos_y needs to be a number"
-        assert drive_type != DRIVE_TYPE_STRAIGHT or distance != None, DRIVE_TYPE_STRAIGHT + ' needs parameter distance'
-        assert drive_type != DRIVE_TYPE_TURN or radius_turn != None, DRIVE_TYPE_TURN + ' needs parameter radius_turn'
-        assert drive_type != DRIVE_TYPE_TURN or angle != None, DRIVE_TYPE_TURN + ' needs parameter angle'
-        assert drive_type != DRIVE_TYPE_ROTATE_TO or orientation != None, DRIVE_TYPE_ROTATE_TO + ' needs parameter orientation'
-        assert drive_type != DRIVE_TYPE_DRIVE_TO or pos_x != None, DRIVE_TYPE_DRIVE_TO + ' needs parameter pos_x'
-        assert drive_type != DRIVE_TYPE_DRIVE_TO or pos_y != None, DRIVE_TYPE_DRIVE_TO + ' needs parameter pos_y'
-        assert isinstance(brake, bool), "brake needs to be a bool value"
-        assert exc is None or isinstance(exc, task.ExceptionHandler), "exc needs to be an ExceptionHandler"
+        assert speed is None or isinstance(speed, int), \
+            'speed needs to be an integer'
+        assert speed != None or drive_type is DRIVE_TYPE_STOP, \
+            drive_type + ' needs attribute speed'
+        assert drive_type is DRIVE_TYPE_STOP or isinstance(speed, int), \
+            drive_type + ' needs parameter speed'
+        assert distance is None or isinstance(distance, numbers.Number), \
+            "distance needs to be a number"
+        assert distance is None or distance >= 0, \
+            "distance needs to be positive"
+        assert radius_turn is None or isinstance(radius_turn, numbers.Number), \
+            "radius_turn needs to be a number"
+        assert angle is None or isinstance(angle, numbers.Number), \
+            "angle needs to be a number"
+        assert isinstance(right_turn, bool), \
+            "right_turn needs to be a bool value"
+        assert orientation is None or isinstance(orientation, numbers.Number), \
+            "orientation needs to be a number"
+        assert pos_x is None or isinstance( pos_x, numbers.Number), \
+            "pos_x needs to be a number"
+        assert pos_y is None or isinstance( pos_y, numbers.Number), \
+            "pos_y needs to be a number"
+        assert drive_type != DRIVE_TYPE_TURN or radius_turn != None, \
+            DRIVE_TYPE_TURN + ' needs parameter radius_turn'
+        assert drive_type != DRIVE_TYPE_ROTATE_TO or orientation != None, \
+            DRIVE_TYPE_ROTATE_TO + ' needs parameter orientation'
+        assert drive_type != DRIVE_TYPE_DRIVE_TO or pos_x != None, \
+            DRIVE_TYPE_DRIVE_TO + ' needs parameter pos_x'
+        assert drive_type != DRIVE_TYPE_DRIVE_TO or pos_y != None, \
+            DRIVE_TYPE_DRIVE_TO + ' needs parameter pos_y'
+        assert isinstance(brake, bool), \
+            "brake needs to be a bool value"
+        assert exc is None or isinstance(exc, task.ExceptionHandler), \
+            "exc needs to be an ExceptionHandler"
         if not exc:
             exc = task.Task._exc_default
         if drive_type == DRIVE_TYPE_STRAIGHT:
-            t = task.concat(
-                task.Task(
+            t = task.Task(
                     self._drive_straight,
                     args=(speed, distance),
                     action_stop=self._vehicle_stop,
                     action_cont=self._vehicle_cont,
                     exc=exc
-                ),
-                task.Repeated(self._test_pos)
             )
+            if distance != None:
+                t.append(task.Repeated(self._test_pos))
         elif drive_type == DRIVE_TYPE_TURN:
-            t = task.concat(
-                task.Task(
+            t = task.Task(
                     self._drive_turn,
                     args=(speed, radius_turn, angle, right_turn),
                     action_stop=self._vehicle_stop,
                     action_cont=self._vehicle_cont,
                     exc=exc
-                ),
-                task.Repeated(self._test_o)
             )
+            if angle != None:
+                t.append(task.Repeated(self._test_o))
         elif drive_type == DRIVE_TYPE_ROTATE_TO:
             t = task.concat(
                 task.Task(
@@ -620,7 +691,11 @@ class TwoWheelVehicle(ev3.EV3):
                 args=(brake,),
                 exc=exc
             )
-        return task.Task(t.start, join=True, exc=exc)
+        if drive_type is DRIVE_TYPE_STRAIGHT and distance is None or \
+           drive_type is DRIVE_TYPE_TURN and angle is None:
+            return task.Task(t.start, exc=exc)
+        else:
+            return task.Task(t.start, join=True, exc=exc)
 
     def _vehicle_stop(self) -> None:
         self.stop()
