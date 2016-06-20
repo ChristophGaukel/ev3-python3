@@ -145,14 +145,6 @@ class PID():
             else:
                 signal_der = self._gain_der * (error - self._error) / delta_time
             self._error = error
-            print("control_signal -- setpoint: {}, value: {}, error: {}, prop: {}, der: {}, int: {}".format(
-                self._setpoint,
-                actual_value,
-                error,
-                signal_prop,
-                signal_der,
-                signal_int
-            ))
             return self._gain_prop * error + signal_int + signal_der
 
 def port_motor_input(port_output: int) -> bytes:
