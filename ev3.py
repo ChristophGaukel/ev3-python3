@@ -14,6 +14,485 @@ import threading
 import time
 import datetime
 import numbers, collections
+import math
+
+def LCX(value: int) -> bytes:
+    """create a LC0, LC1, LC2, LC4, dependent from the value"""
+    if type(value) == 'bytes' and len(value) == 1:
+        value = struct.unpack('b', value)[0]
+
+    if   value >=    -32 and value <      0:
+        return struct.pack('b', 0x3F & (value + 64))
+    elif value >=      0 and value <     32:
+        return struct.pack('b', value)
+    elif value >=   -127 and value <=   127:
+        return b'\x81' + struct.pack('<b', value)
+    elif value >= -32767 and value <= 32767:
+        return b'\x82' + struct.pack('<h', value)
+    else:
+        return b'\x83' + struct.pack('<i', value)
+
+def LCS(value: str) -> bytes:
+    """
+    pack a string into a LCS
+    """
+    return b'\x84' + str.encode(value) + b'\x00'
+
+def LVX(value: int) -> bytes:
+    """
+    create a LV0, LV1, LV2, LV4, dependent from the value
+    """
+    if value   <     0:
+        raise RuntimeError('No negative values allowed')
+    elif value <    32:
+        return struct.pack('b', 0x40 | value)
+    elif value <   256:
+        return b'\xc1' + struct.pack('<b', value)
+    elif value < 65536:
+        return b'\xc2' + struct.pack('<h', value)
+    else:
+        return b'\xc3' + struct.pack('<i', value)
+
+def GVX(value: int) -> bytes:
+    """create a GV0, GV1, GV2, GV4, dependent from the value"""
+    if value   <     0:
+        raise RuntimeError('No negative values allowed')
+    elif value <    32:
+        return struct.pack('<b', 0x60 | value)
+    elif value <   256:
+        return b'\xe1' + struct.pack('<b', value)
+    elif value < 65536:
+        return b'\xe2' + struct.pack('<h', value)
+    else:
+        return b'\xe3' + struct.pack('<i', value)
+
+class PID():
+    """
+    object to implement a PID controller
+    """
+    def __init__(self,
+                 setpoint: float,
+                 gain_prop: float,
+                 gain_der: float=None,
+                 gain_int: float=None,
+                 half_life_val: float=None,
+                 half_life_int: float=None
+    ):
+        """
+        Parametrizes a new PID controller
+
+        Arguments:
+        setpoint: ideal value of the process variable
+        gain_prop: proportional gain,
+        high values result in fast adaption, but too high values produce oscillations or instabilities
+
+        Keyword Arguments:
+        gain_der: gain of the derivative part [s], decreases overshooting and settling time
+        gain_int: gain of the integrative part [1/s], eliminates steady-state error, slower and smoother response
+        half_life_val: used for discrete systems, smooths actual values [s]
+        half_life_int: used for dynamic systems, reduces memory of the integrative part [s]
+        """
+        self._setpoint = setpoint
+        self._gain_prop = gain_prop
+        self._gain_int = gain_int
+        self._gain_der = gain_der
+        self._half_life_val = half_life_val
+        self._half_life_int = half_life_int
+        self._error = None
+        self._time = None
+        self._int = None
+        self._value = None
+
+    def control_signal(self, actual_value: float) -> float:
+        """
+        calculates the control signal from the actual value
+
+        Arguments:
+        actual_value: actual measured process variable (will be compared to setpoint)
+
+        Returns:
+        control signal, which will be sent to the process
+        """
+        if self._value is None:
+            self._value = actual_value
+            self._time = time.time()
+            self._int = 0
+            self._error = self._setpoint - actual_value
+            return self._gain_prop * self._error
+        else:
+            time_act = time.time()
+            delta_time = time_act - self._time
+            self._time = time_act
+            if self._half_life_val is None:
+                self._value = actual_value
+            else:
+                fact1 = math.log(2) / self._half_life_val
+                fact2 = math.exp(-fact1 * delta_time)
+                self._value = fact2 * self._value + actual_value * (1 - fact2)
+            error = self._setpoint - self._value
+            if self._gain_int is None:
+                signal_int = 0
+            else:
+                if self._half_life_int is None:
+                    self._int += error * delta_time
+                else:
+                    fact1 = math.log(2) / self._half_life_int
+                    fact2 = math.exp(-fact1 * delta_time)
+                    self._int = fact2 * self._int + error * (1 - fact2)
+                signal_int = self._gain_int * self._int
+            if self._gain_der is None:
+                signal_der = 0
+            else:
+                signal_der = self._gain_der * (error - self._error) / delta_time
+            self._error = error
+            print("control_signal -- setpoint: {}, value: {}, error: {}, prop: {}, der: {}, int: {}".format(
+                self._setpoint,
+                actual_value,
+                error,
+                signal_prop,
+                signal_der,
+                signal_int
+            ))
+            return self._gain_prop * error + signal_int + signal_der
+
+def port_motor_input(port_output: int) -> bytes:
+    """
+    get corresponding input motor port (from output motor port)
+    """
+    if port_output == PORT_A:
+        return LCX(16)
+    elif port_output == PORT_B:
+        return LCX(17)
+    elif port_output == PORT_C:
+        return LCX(18)
+    elif port_output == PORT_D:
+        return LCX(19)
+    else:
+        raise ValueError("port_output needs to be one of the port numbers [1, 2, 4, 8]")
+
+class ForeignReplies:
+    """
+    foreign replies of the EV3
+    """
+    def __init__(self):
+        self._unwanted = {}
+
+    def put(self, counter: bytes, reply: bytes):
+        """
+        put a foreign reply to the stack
+        """
+        if counter in self._unwanted:
+            raise ValueError('reply with counter ' + key + ' already exists')
+        else:
+            self._unwanted[counter] = reply
+
+    def get(self, counter: bytes) -> bytes:
+        """
+        get a reply from the stack (returns None if there is no)
+        and delete reply from the stack
+        """
+        if counter in self._unwanted:
+            reply = self._unwanted[counter]
+            del self._unwanted[counter]
+            return reply
+        else:
+            return None
+
+class MessageCounter:
+    """
+    message counter
+    """
+    def __init__(self):
+        self._cnt = 41
+    def next(self):
+        if self._cnt < 65535:
+            self._cnt += 1
+            return self._cnt
+        else:
+            self._cnt = 42
+            return self._cnt
+    @property
+    def cnt(self):
+        """
+        actual value of message counter (the last given)
+        """
+        return self._cnt    
+
+# pylint: disable=too-many-arguments
+class EV3:
+    """
+    object to communicate with a LEGO EV3 using direct commands
+    """
+
+    _lock = threading.Lock()
+
+    def __init__(self, protocol: str=None, host: str=None, ev3_obj=None):
+        """
+        Establish a connection to a LEGO EV3 device
+
+        Keyword Arguments (either protocol and host or ev3_obj):
+        protocol: None, 'Bluetooth', 'Usb' or 'Wifi'
+        host: None or mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
+        ev3_obj: None or an existing EV3 object (its connections will be used)
+        """
+        assert ev3_obj or protocol, \
+            'Either protocol or ev3_obj needs to be given'
+        if ev3_obj:
+            assert isinstance(ev3_obj, EV3), \
+                'ev3_obj needs to be instance of EV3'
+            self._protocol = ev3_obj._protocol
+            self._device = ev3_obj._device
+            self._socket = ev3_obj._socket
+            self._foreign = ev3_obj._foreign
+            self._msg_cnt = ev3_obj._msg_cnt
+        elif protocol:
+            assert protocol in [BLUETOOTH, WIFI, USB], \
+                'Protocol ' + protocol + 'is not valid'
+            self._protocol = None
+            self._device = None
+            self._socket = None
+            if protocol == BLUETOOTH:
+                assert host, 'Protocol ' + protocol + 'needs host-id'
+                self._connect_bluetooth(host)
+            elif protocol == WIFI:
+                self._connect_wifi()
+            elif protocol == USB:
+                self._connect_usb()
+            self._foreign = ForeignReplies()
+            self._msg_cnt = MessageCounter()
+        self._verbosity = 0
+        self._sync_mode = STD
+
+    @property
+    def sync_mode(self) -> str:
+        """
+        sync mode (standard, asynchronous, synchronous)
+
+        STD:   Use DIRECT_COMMAND_REPLY if global_mem > 0,
+               wait for reply if there is one.
+        ASYNC: Use DIRECT_COMMAND_REPLY if global_mem > 0,
+               never wait for reply (it's the task of the calling program).
+        SYNC:  Always use DIRECT_COMMAND_REPLY and wait for reply.
+
+        The general idea is:
+        ASYNC: Interruption or EV3 device queues direct commands,
+               control directly comes back.
+        SYNC:  EV3 device is blocked until direct command is finished,
+               control comes back, when direct command is finished.               
+        STD:   NO_REPLY like ASYNC with interruption or EV3 queuing,
+               REPLY like SYNC, synchronicity of program and EV3 device.
+        """
+        return self._sync_mode
+    @sync_mode.setter
+    def sync_mode(self, value: str):
+        assert isinstance(value, str), \
+            "sync_mode needs to be of type str"
+        assert value in [STD, SYNC, ASYNC], \
+            "value of sync_mode: " + value + " is invalid"
+        self._sync_mode = value
+
+    @property
+    def verbosity(self) -> int:
+        """
+        level of verbosity (prints on stdout).
+        """
+        return self._verbosity
+    @verbosity.setter
+    def verbosity(self, value:int):
+        assert isinstance(value, int), \
+            "verbosity needs to be of type int"
+        assert value >= 0 and value <= 2, \
+            "allowed verbosity values are: 0, 1 or 2"
+        self._verbosity = value
+
+    def __del__(self):
+        """
+        closes the connection to the LEGO EV3
+        """
+        if self._protocol in [BLUETOOTH, WIFI]:
+            self._socket.close()
+
+    def _connect_bluetooth(self, host: str) -> int:
+        """
+        Create a socket, that holds a bluetooth-connection to an EV3
+        """
+        self._socket = socket.socket(socket.AF_BLUETOOTH,
+                                     socket.SOCK_STREAM,
+                                     socket.BTPROTO_RFCOMM)
+        self._socket.connect((host, 1))
+        self._protocol = BLUETOOTH
+        return 1
+
+    def _connect_wifi(self) -> int:
+        """
+        Create a socket, that holds a wifi-connection to an EV3
+        """
+
+        #pylint: disable=anomalous-backslash-in-string
+
+        # listen on port 3015 for a UDP broadcast from the EV3
+        UDPSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        UDPSock.bind(('', 3015))
+        data, addr = UDPSock.recvfrom(67)
+
+        # pick serial number, port, name and protocol
+        # from the broadcast message
+        matcher = re.search('Serial-Number: (\w*)\s\n' +
+                            'Port: (\d{4,4})\s\n' +
+                            'Name: (\w+)\s\n' +
+                            'Protocol: (\w+)\s\n',
+                            data.decode('utf-8'))
+        serial_number = matcher.group(1)
+        port          = matcher.group(2)
+        name          = matcher.group(3)
+        protocol      = matcher.group(4)
+
+        # Send an UDP message back to the EV3
+        # to make it accept a TCP/IP connection
+        UDPSock.sendto(' '.encode('utf-8'), (addr[0], int(port)))
+        UDPSock.close()
+
+        # Establish a TCP/IP connection with EV3s address and port
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.connect((addr[0], int(port)))
+
+        # Send an unlock message to the EV3 over TCP/IP
+        msg = 'GET /target?sn=' + serial_number + 'VMTP1.0\n' + \
+              'Protocol: ' + protocol
+        self._socket.send(msg.encode('utf-8'))
+        reply = self._socket.recv(16).decode('utf-8')
+        if not reply.startswith('Accept:EV340'):
+            raise RuntimeError('No wifi connection to ' + name + ' established')
+
+        self._protocol = WIFI
+        return 1
+
+    def _connect_usb (self) -> int:
+        """
+        Create a device, that holds an usb-connection to an EV3
+        """
+        self._device = usb.core.find(idVendor=_ID_VENDOR_LEGO,
+                                     idProduct=_ID_PRODUCT_EV3)
+
+        if self._device is None:
+            raise RuntimeError("No Lego EV3 found")
+
+        if self._device.is_kernel_driver_active(0) is True:
+            self._device.detach_kernel_driver(0)
+        self._device.set_configuration()
+
+        # initial read
+        self._device.read(_EP_IN, 1024, 100)
+
+        self._protocol = USB
+        return 1
+
+    def _complete_direct_cmd(self, ops:bytes,
+                             local_mem:int,
+                             global_mem:int) -> bytes:
+        """
+        complete direct command with heading standard parts
+        """
+        if global_mem > 0  or self._sync_mode == SYNC:
+            cmd_type = _DIRECT_COMMAND_REPLY
+        else:
+            cmd_type = _DIRECT_COMMAND_NO_REPLY
+        return b''.join([
+            struct.pack('<hh', len(ops) + 5, self._msg_cnt.next()),
+            cmd_type,
+            struct.pack('<h', local_mem * 1024 + global_mem),
+            ops
+        ])
+
+    def send_direct_cmd(self, ops: bytes,
+                        local_mem: int = 0,
+                        global_mem: int = 0) -> bytes:
+        """
+        Send a direct command to the LEGO EV3
+
+        Arguments:
+        ops: holds netto data only (operations), the following fields are added:
+          length: 2 bytes, little endian
+          counter: 2 bytes, little endian
+          type: 1 byte, DIRECT_COMMAND_REPLY or DIRECT_COMMAND_NO_REPLY
+          header: 2 bytes, holds sizes of local and global memory
+        
+        Keyword Arguments:
+        local_mem: size of the local memory
+        global_mem: size of the global memory
+
+        Returns: 
+          sync_mode is STD: reply (if global_mem > 0) or message counter
+          sync_mode is ASYNC: message counter
+          sync_mode is SYNC: reply of the LEGO EV3
+        """
+        cmd = self._complete_direct_cmd(ops, local_mem, global_mem)
+        if self._verbosity >= 1:
+            now = datetime.datetime.now().strftime('%H:%M:%S.%f')
+            print(now + \
+                  ' Sent 0x|' + \
+                  ':'.join('{:02X}'.format(byte) for byte in cmd[0:2]) + '|' + \
+                  ':'.join('{:02X}'.format(byte) for byte in cmd[2:4]) + '|' + \
+                  ':'.join('{:02X}'.format(byte) for byte in cmd[4:5]) + '|' + \
+                  ':'.join('{:02X}'.format(byte) for byte in cmd[5:7]) + '|' + \
+                  ':'.join('{:02X}'.format(byte) for byte in cmd[7:]) + '|' \
+            )
+        if self._protocol in [BLUETOOTH, WIFI]:
+            self._socket.send(cmd)
+        elif self._protocol is USB:
+            self._device.write(_EP_OUT, cmd, 100)
+        else:
+            raise RuntimeError('No EV3 connected')
+        counter = cmd[2:4]
+        if  cmd[4:5] == _DIRECT_COMMAND_NO_REPLY or self._sync_mode == ASYNC:
+            return counter
+        else:
+            reply = self.wait_for_reply(counter)
+            return reply
+
+    def wait_for_reply(self, counter: bytes) -> bytes:
+        """
+        Ask the LEGO EV3 for a reply and wait until it is received
+
+        Arguments:
+        counter: is the message counter of the corresponding send_direct_cmd
+        
+        Returns:
+        reply to the direct command
+        """
+        self._lock.acquire()
+        if counter:
+            reply = self._foreign.get(counter)
+            if reply:
+                self._lock.release()
+                return reply
+        while True:
+            if self._protocol in [BLUETOOTH, WIFI]:
+                reply = self._socket.recv(1024)
+            else:
+                reply = bytes(self._device.read(_EP_IN, 1024, 0))
+            global_mem = struct.unpack('<H', reply[:2])[0] - 3
+            reply_counter = reply[2:4]
+            if self._verbosity >= 1:
+                now = datetime.datetime.now().strftime('%H:%M:%S.%f')
+                print(now + \
+                      ' Recv 0x|' + \
+                      ':'.join('{:02X}'.format(byte) for byte in reply[0:2]) + \
+                      '|' + \
+                      ':'.join('{:02X}'.format(byte) for byte in reply[2:4]) + \
+                      '|' + \
+                      ':'.join('{:02X}'.format(byte) for byte in reply[4:5]) + \
+                      '|', end='')
+                if global_mem > 0:
+                    dat = ':'.join('{:02X}'.format(byte) for byte in reply[5:global_mem + 5])
+                    print(dat + '|')
+                else:
+                    print()
+            if counter != reply_counter:
+                self._foreign.put(reply_counter, reply)
+            else:
+                self._lock.release()
+                return reply[:global_mem + 5]
 
 WIFI      = 'Wifi'                      
 BLUETOOTH = 'Bluetooth'
@@ -816,395 +1295,6 @@ HALTED                    = b'\x80'
 DEVCMD_RESET              = b'\x11' # UART device reset
 DEVCMD_FIRE               = b'\x11' # UART device fire (ultrasonic)
 DEVCMD_CHANNEL            = b'\x12' # UART device channel (IR seeker)
-
-def LCX(value: int) -> bytes:
-    """create a LC0, LC1, LC2, LC4, dependent from the value"""
-    if type(value) == 'bytes' and len(value) == 1:
-        value = struct.unpack('b', value)[0]
-
-    if   value >=    -32 and value <      0:
-        return struct.pack('b', 0x3F & (value + 64))
-    elif value >=      0 and value <     32:
-        return struct.pack('b', value)
-    elif value >=   -127 and value <=   127:
-        return b'\x81' + struct.pack('<b', value)
-    elif value >= -32767 and value <= 32767:
-        return b'\x82' + struct.pack('<h', value)
-    else:
-        return b'\x83' + struct.pack('<i', value)
-
-def LCS(value: str) -> bytes:
-    """
-    pack a string into a LCS
-    """
-    return b'\x84' + str.encode(value) + b'\x00'
-
-def LVX(value: int) -> bytes:
-    """
-    create a LV0, LV1, LV2, LV4, dependent from the value
-    """
-    if value   <     0:
-        raise RuntimeError('No negative values allowed')
-    elif value <    32:
-        return struct.pack('b', 0x40 | value)
-    elif value <   256:
-        return b'\xc1' + struct.pack('<b', value)
-    elif value < 65536:
-        return b'\xc2' + struct.pack('<h', value)
-    else:
-        return b'\xc3' + struct.pack('<i', value)
-
-def GVX(value: int) -> bytes:
-    """create a GV0, GV1, GV2, GV4, dependent from the value"""
-    if value   <     0:
-        raise RuntimeError('No negative values allowed')
-    elif value <    32:
-        return struct.pack('<b', 0x60 | value)
-    elif value <   256:
-        return b'\xe1' + struct.pack('<b', value)
-    elif value < 65536:
-        return b'\xe2' + struct.pack('<h', value)
-    else:
-        return b'\xe3' + struct.pack('<i', value)
-
-def port_motor_input(port_output: int) -> bytes:
-    """
-    get corresponding input motor port (from output motor port)
-    """
-    if port_output == PORT_A:
-        return LCX(16)
-    elif port_output == PORT_B:
-        return LCX(17)
-    elif port_output == PORT_C:
-        return LCX(18)
-    elif port_output == PORT_D:
-        return LCX(19)
-    else:
-        raise ValueError("port_output needs to be one of the port numbers [1, 2, 4, 8]")
-
-class ForeignReplies:
-    """
-    foreign replies of the EV3
-    """
-    def __init__(self):
-        self._unwanted = {}
-
-    def put(self, counter: bytes, reply: bytes):
-        """
-        put a foreign reply to the stack
-        """
-        if counter in self._unwanted:
-            raise ValueError('reply with counter ' + key + ' already exists')
-        else:
-            self._unwanted[counter] = reply
-
-    def get(self, counter: bytes) -> bytes:
-        """
-        get a reply from the stack (returns None if there is no)
-        and delete reply from the stack
-        """
-        if counter in self._unwanted:
-            reply = self._unwanted[counter]
-            del self._unwanted[counter]
-            return reply
-        else:
-            return None
-
-class MessageCounter:
-    """
-    message counter
-    """
-    def __init__(self):
-        self._cnt = 41
-    def next(self):
-        if self._cnt < 65535:
-            self._cnt += 1
-            return self._cnt
-        else:
-            self._cnt = 42
-            return self._cnt
-    @property
-    def cnt(self):
-        """
-        actual value of message counter (the last given)
-        """
-        return self._cnt    
-
-# pylint: disable=too-many-arguments
-class EV3:
-    """
-    object to communicate with a LEGO EV3 using direct commands
-    """
-
-    _lock = threading.Lock()
-
-    def __init__(self, protocol: str=None, host: str=None, ev3_obj=None):
-        """
-        Establish a connection to a LEGO EV3 device
-
-        Keyword Arguments (either protocol and host or ev3_obj):
-        protocol: None, 'Bluetooth', 'Usb' or 'Wifi'
-        host: None or mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
-        ev3_obj: None or an existing EV3 object (its connections will be used)
-        """
-        assert ev3_obj or protocol, \
-            'Either protocol or ev3_obj needs to be given'
-        if ev3_obj:
-            assert isinstance(ev3_obj, EV3), \
-                'ev3_obj needs to be instance of EV3'
-            self._protocol = ev3_obj._protocol
-            self._device = ev3_obj._device
-            self._socket = ev3_obj._socket
-            self._foreign = ev3_obj._foreign
-            self._msg_cnt = ev3_obj._msg_cnt
-        elif protocol:
-            assert protocol in [BLUETOOTH, WIFI, USB], \
-                'Protocol ' + protocol + 'is not valid'
-            self._protocol = None
-            self._device = None
-            self._socket = None
-            if protocol == BLUETOOTH:
-                assert host, 'Protocol ' + protocol + 'needs host-id'
-                self._connect_bluetooth(host)
-            elif protocol == WIFI:
-                self._connect_wifi()
-            elif protocol == USB:
-                self._connect_usb()
-            self._foreign = ForeignReplies()
-            self._msg_cnt = MessageCounter()
-        self._verbosity = 0
-        self._sync_mode = STD
-
-    @property
-    def sync_mode(self) -> str:
-        """
-        sync mode (standard, asynchronous, synchronous)
-
-        STD:   Use DIRECT_COMMAND_REPLY if global_mem > 0,
-               wait for reply if there is one.
-        ASYNC: Use DIRECT_COMMAND_REPLY if global_mem > 0,
-               never wait for reply (it's the task of the calling program).
-        SYNC:  Always use DIRECT_COMMAND_REPLY and wait for reply.
-
-        The general idea is:
-        ASYNC: Interruption or EV3 device queues direct commands,
-               control directly comes back.
-        SYNC:  EV3 device is blocked until direct command is finished,
-               control comes back, when direct command is finished.               
-        STD:   NO_REPLY like ASYNC with interruption or EV3 queuing,
-               REPLY like SYNC, synchronicity of program and EV3 device.
-        """
-        return self._sync_mode
-    @sync_mode.setter
-    def sync_mode(self, value: str):
-        assert isinstance(value, str), \
-            "sync_mode needs to be of type str"
-        assert value in [STD, SYNC, ASYNC], \
-            "value of sync_mode: " + value + " is invalid"
-        self._sync_mode = value
-
-    @property
-    def verbosity(self) -> int:
-        """
-        level of verbosity (prints on stdout).
-        """
-        return self._verbosity
-    @verbosity.setter
-    def verbosity(self, value:int):
-        assert isinstance(value, int), \
-            "verbosity needs to be of type int"
-        assert value >= 0 and value <= 2, \
-            "allowed verbosity values are: 0, 1 or 2"
-        self._verbosity = value
-
-    def __del__(self):
-        """
-        closes the connection to the LEGO EV3
-        """
-        if self._protocol in [BLUETOOTH, WIFI]:
-            self._socket.close()
-
-    def _connect_bluetooth(self, host: str) -> int:
-        """
-        Create a socket, that holds a bluetooth-connection to an EV3
-        """
-        self._socket = socket.socket(socket.AF_BLUETOOTH,
-                                     socket.SOCK_STREAM,
-                                     socket.BTPROTO_RFCOMM)
-        self._socket.connect((host, 1))
-        self._protocol = BLUETOOTH
-        return 1
-
-    def _connect_wifi(self) -> int:
-        """
-        Create a socket, that holds a wifi-connection to an EV3
-        """
-
-        #pylint: disable=anomalous-backslash-in-string
-
-        # listen on port 3015 for a UDP broadcast from the EV3
-        UDPSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        UDPSock.bind(('', 3015))
-        data, addr = UDPSock.recvfrom(67)
-
-        # pick serial number, port, name and protocol
-        # from the broadcast message
-        matcher = re.search('Serial-Number: (\w*)\s\n' +
-                            'Port: (\d{4,4})\s\n' +
-                            'Name: (\w+)\s\n' +
-                            'Protocol: (\w+)\s\n',
-                            data.decode('utf-8'))
-        serial_number = matcher.group(1)
-        port          = matcher.group(2)
-        name          = matcher.group(3)
-        protocol      = matcher.group(4)
-
-        # Send an UDP message back to the EV3
-        # to make it accept a TCP/IP connection
-        UDPSock.sendto(' '.encode('utf-8'), (addr[0], int(port)))
-        UDPSock.close()
-
-        # Establish a TCP/IP connection with EV3s address and port
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.connect((addr[0], int(port)))
-
-        # Send an unlock message to the EV3 over TCP/IP
-        msg = 'GET /target?sn=' + serial_number + 'VMTP1.0\n' + \
-              'Protocol: ' + protocol
-        self._socket.send(msg.encode('utf-8'))
-        reply = self._socket.recv(16).decode('utf-8')
-        if not reply.startswith('Accept:EV340'):
-            raise RuntimeError('No wifi connection to ' + name + ' established')
-
-        self._protocol = WIFI
-        return 1
-
-    def _connect_usb (self) -> int:
-        """
-        Create a device, that holds an usb-connection to an EV3
-        """
-        self._device = usb.core.find(idVendor=_ID_VENDOR_LEGO,
-                                     idProduct=_ID_PRODUCT_EV3)
-
-        if self._device is None:
-            raise RuntimeError("No Lego EV3 found")
-
-        if self._device.is_kernel_driver_active(0) is True:
-            self._device.detach_kernel_driver(0)
-        self._device.set_configuration()
-
-        # initial read
-        self._device.read(_EP_IN, 1024, 100)
-
-        self._protocol = USB
-        return 1
-
-    def _complete_direct_cmd(self, ops:bytes,
-                             local_mem:int,
-                             global_mem:int) -> bytes:
-        """
-        complete direct command with heading standard parts
-        """
-        if global_mem > 0  or self._sync_mode == SYNC:
-            cmd_type = _DIRECT_COMMAND_REPLY
-        else:
-            cmd_type = _DIRECT_COMMAND_NO_REPLY
-        return b''.join([
-            struct.pack('<hh', len(ops) + 5, self._msg_cnt.next()),
-            cmd_type,
-            struct.pack('<h', local_mem * 1024 + global_mem),
-            ops
-        ])
-
-    def send_direct_cmd(self, ops: bytes,
-                        local_mem: int = 0,
-                        global_mem: int = 0) -> bytes:
-        """
-        Send a direct command to the LEGO EV3
-
-        Arguments:
-        ops: holds netto data only (operations), the following fields are added:
-          length: 2 bytes, little endian
-          counter: 2 bytes, little endian
-          type: 1 byte, DIRECT_COMMAND_REPLY or DIRECT_COMMAND_NO_REPLY
-          header: 2 bytes, holds sizes of local and global memory
-        
-        Keyword Arguments:
-        local_mem: size of the local memory
-        global_mem: size of the global memory
-
-        Returns: 
-          sync_mode is STD: reply (if global_mem > 0) or message counter
-          sync_mode is ASYNC: message counter
-          sync_mode is SYNC: reply of the LEGO EV3
-        """
-        cmd = self._complete_direct_cmd(ops, local_mem, global_mem)
-        if self._verbosity >= 1:
-            now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-            print(now + \
-                  ' Sent 0x|' + \
-                  ':'.join('{:02X}'.format(byte) for byte in cmd[0:2]) + '|' + \
-                  ':'.join('{:02X}'.format(byte) for byte in cmd[2:4]) + '|' + \
-                  ':'.join('{:02X}'.format(byte) for byte in cmd[4:5]) + '|' + \
-                  ':'.join('{:02X}'.format(byte) for byte in cmd[5:7]) + '|' + \
-                  ':'.join('{:02X}'.format(byte) for byte in cmd[7:]) + '|' \
-            )
-        if self._protocol in [BLUETOOTH, WIFI]:
-            self._socket.send(cmd)
-        elif self._protocol is USB:
-            self._device.write(_EP_OUT, cmd, 100)
-        else:
-            raise RuntimeError('No EV3 connected')
-        counter = cmd[2:4]
-        if  cmd[4:5] == _DIRECT_COMMAND_NO_REPLY or self._sync_mode == ASYNC:
-            return counter
-        else:
-            reply = self.wait_for_reply(counter)
-            return reply
-
-    def wait_for_reply(self, counter: bytes) -> bytes:
-        """
-        Ask the LEGO EV3 for a reply and wait until it is received
-
-        Arguments:
-        counter: is the message counter of the corresponding send_direct_cmd
-        
-        Returns:
-        reply to the direct command
-        """
-        self._lock.acquire()
-        if counter:
-            reply = self._foreign.get(counter)
-            if reply:
-                self._lock.release()
-                return reply
-        while True:
-            if self._protocol in [BLUETOOTH, WIFI]:
-                reply = self._socket.recv(1024)
-            else:
-                reply = bytes(self._device.read(_EP_IN, 1024, 0))
-            global_mem = struct.unpack('<H', reply[:2])[0] - 3
-            reply_counter = reply[2:4]
-            if self._verbosity >= 1:
-                now = datetime.datetime.now().strftime('%H:%M:%S.%f')
-                print(now + \
-                      ' Recv 0x|' + \
-                      ':'.join('{:02X}'.format(byte) for byte in reply[0:2]) + \
-                      '|' + \
-                      ':'.join('{:02X}'.format(byte) for byte in reply[2:4]) + \
-                      '|' + \
-                      ':'.join('{:02X}'.format(byte) for byte in reply[4:5]) + \
-                      '|', end='')
-                if global_mem > 0:
-                    dat = ':'.join('{:02X}'.format(byte) for byte in reply[5:global_mem + 5])
-                    print(dat + '|')
-                else:
-                    print()
-            if counter != reply_counter:
-                self._foreign.put(reply_counter, reply)
-            else:
-                self._lock.release()
-                return reply[:global_mem + 5]
 
 if __name__ == "__main__":
     my_ev3 = EV3(protocol=BLUETOOTH, host='00:16:53:42:2B:99')
