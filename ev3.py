@@ -84,12 +84,12 @@ class PID():
         Arguments:
         setpoint: ideal value of the process variable
         gain_prop: proportional gain,
-        high values result in fast adaption, but too high values produce oscillations or instabilities
+                   high values result in fast adaption, but too high values produce oscillations or instabilities
 
         Keyword Arguments:
         gain_der: gain of the derivative part [s], decreases overshooting and settling time
         gain_int: gain of the integrative part [1/s], eliminates steady-state error, slower and smoother response
-        half_life_val: used for discrete systems, smooths actual values [s]
+        half_life_val: used for discrete or noisy systems, smooths actual values [s]
         half_life_int: used for dynamic systems, reduces memory of the integrative part [s]
         """
         self._setpoint = setpoint

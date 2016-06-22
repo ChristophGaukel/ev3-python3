@@ -281,7 +281,7 @@ class TwoWheelVehicle(ev3.EV3):
 
         Arguments:
         speed: speed in percent [-100 - 100]
-          > 0: foreward
+          > 0: forward
           < 0: backward
         turn: type of turn [-200 - 200]
           -200: circle right on place
@@ -357,7 +357,7 @@ class TwoWheelVehicle(ev3.EV3):
 
     def drive_straight(self, speed: int, distance: float=None) -> None:
         """
-        Drive the vehicle straight foreward or backward.
+        Drive the vehicle straight forward or backward.
 
         Attributes:
         speed: in percent [-100 - 100] (direction depends on its sign)
