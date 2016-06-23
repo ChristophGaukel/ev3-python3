@@ -162,61 +162,60 @@ def port_motor_input(port_output: int) -> bytes:
     else:
         raise ValueError("port_output needs to be one of the port numbers [1, 2, 4, 8]")
 
-class ForeignReplies:
+class _ForeignReplies:
     """
     foreign replies of the EV3
     """
     def __init__(self):
-        self._unwanted = {}
+        self._stack = {}
 
-    def put(self, counter: bytes, reply: bytes):
+    def put(self, counter: bytes, reply: bytes) -> None:
         """
         put a foreign reply to the stack
         """
-        if counter in self._unwanted:
+        if counter in self._stack:
             raise ValueError('reply with counter ' + key + ' already exists')
         else:
-            self._unwanted[counter] = reply
+            self._stack[counter] = reply
 
     def get(self, counter: bytes) -> bytes:
         """
         get a reply from the stack (returns None if there is no)
-        and delete reply from the stack
+        and delete this reply from the stack
         """
-        if counter in self._unwanted:
-            reply = self._unwanted[counter]
-            del self._unwanted[counter]
+        if counter in self._stack:
+            reply = self._stack[counter]
+            del self._stack[counter]
             return reply
         else:
             return None
 
-class MessageCounter:
+class _MessageCounter:
     """
     message counter
     """
     def __init__(self):
         self._cnt = 41
+
     def next(self):
+        """
+        increments the conter and return the next value
+        """
         if self._cnt < 65535:
             self._cnt += 1
             return self._cnt
         else:
-            self._cnt = 42
+            self._cnt = 1
             return self._cnt
-    @property
-    def cnt(self):
-        """
-        actual value of message counter (the last given)
-        """
-        return self._cnt    
 
 # pylint: disable=too-many-arguments
 class EV3:
     """
     object to communicate with a LEGO EV3 using direct commands
     """
-
     _lock = threading.Lock()
+    _msg_cnt = _MessageCounter()
+    _foreign = _ForeignReplies()
 
     def __init__(self, protocol: str=None, host: str=None, ev3_obj=None):
         """
@@ -235,9 +234,7 @@ class EV3:
             self._protocol = ev3_obj._protocol
             self._device = ev3_obj._device
             self._socket = ev3_obj._socket
-            self._foreign = ev3_obj._foreign
-            self._msg_cnt = ev3_obj._msg_cnt
-        elif protocol:
+        else:
             assert protocol in [BLUETOOTH, WIFI, USB], \
                 'Protocol ' + protocol + 'is not valid'
             self._protocol = None
@@ -250,8 +247,6 @@ class EV3:
                 self._connect_wifi()
             elif protocol == USB:
                 self._connect_usb()
-            self._foreign = ForeignReplies()
-            self._msg_cnt = MessageCounter()
         self._verbosity = 0
         self._sync_mode = STD
 
@@ -389,8 +384,11 @@ class EV3:
             cmd_type = _DIRECT_COMMAND_REPLY
         else:
             cmd_type = _DIRECT_COMMAND_NO_REPLY
+        self._lock.acquire()
+        msg_cnt = self._msg_cnt.next()
+        self._lock.release()
         return b''.join([
-            struct.pack('<hh', len(ops) + 5, self._msg_cnt.next()),
+            struct.pack('<hh', len(ops) + 5, msg_cnt),
             cmd_type,
             struct.pack('<h', local_mem * 1024 + global_mem),
             ops
@@ -453,11 +451,10 @@ class EV3:
         reply to the direct command
         """
         self._lock.acquire()
-        if counter:
-            reply = self._foreign.get(counter)
-            if reply:
-                self._lock.release()
-                return reply
+        reply = self._foreign.get(counter)
+        if reply:
+            self._lock.release()
+            return reply
         while True:
             if self._protocol in [BLUETOOTH, WIFI]:
                 reply = self._socket.recv(1024)

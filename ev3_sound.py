@@ -2,72 +2,86 @@
 
 import ev3, time, datetime, sched, threading, task, numbers
 
-ALLE_MEINE_ENTCHEN = {"tempo": 130,
-                      "beats_per_bar": 4,
-                      "led_sequence": [ev3.LED_ORANGE, ev3.LED_RED, ev3.LED_ORANGE, ev3.LED_GREEN],
-                      "tones": [
-                          ["c'", 1],
-                          ["d'", 1],
-                          ["e'", 1],
-                          ["f'", 1],
-                          ["g'", 2],
-                          ["g'", 2],
-                          ["a'", 1],
-                          ["a'", 1],
-                          ["a'", 1],
-                          ["a'", 1],
-                          ["g'", 4],
-                          ["a'", 1],
-                          ["a'", 1],
-                          ["a'", 1],
-                          ["a'", 1],
-                          ["g'", 4],
-                          ["f'", 1],
-                          ["f'", 1],
-                          ["f'", 1],
-                          ["f'", 1],
-                          ["e'", 2],
-                          ["e'", 2],
-                          ["d'", 1],
-                          ["d'", 1],
-                          ["d'", 1],
-                          ["d'", 1],
-                          ["c'", 4]
-                      ]
-                  }
+TRIAS = {
+    "tempo": 80,
+    "beats_per_bar": 3,
+    "led_sequence": [ev3.LED_ORANGE, ev3.LED_RED_FLASH],
+    "tones": [
+        ["c'", 1],
+        ["e'", 1],
+        ["g'", 1],
+        ["c''",3],
+    ]
+}
 
-HAPPY_BIRTHDAY = {"tempo": 100,
-                  "beats_per_bar": 3,
-                  "upbeat": 1,
-                  "led_sequence": [ev3.LED_ORANGE, ev3.LED_GREEN, ev3.LED_RED, ev3.LED_GREEN],
-                  "tones": [
-                      ["d'", 0.75],
-                      ["d'", 0.25],
-                      ["e'", 1],
-                      ["d'", 1],
-                      ["g'", 1],
-                      ["f#'", 2],
-                      ["d'", 0.75],
-                      ["d'", 0.25],
-                      ["e'", 1],
-                      ["d'", 1],
-                      ["a'", 1],
-                      ["g'", 2],
-                      ["d'", 0.75],
-                      ["d'", 0.25],
-                      ["d''", 1],
-                      ["b'", 1],
-                      ["g'", 1],
-                      ["f#'", 1],
-                      ["e'", 1],
-                      ["c''", 0.75],
-                      ["c''", 0.25],
-                      ["b'", 1],
-                      ["g'", 1],
-                      ["a'", 1],
-                      ["g'", 2]
-                  ]
-                  }
+ALLE_MEINE_ENTCHEN = {
+    "tempo": 130,
+    "beats_per_bar": 4,
+    "led_sequence": [ev3.LED_ORANGE, ev3.LED_RED, ev3.LED_ORANGE, ev3.LED_GREEN],
+    "tones": [
+        ["c'", 1],
+        ["d'", 1],
+        ["e'", 1],
+        ["f'", 1],
+        ["g'", 2],
+        ["g'", 2],
+        ["a'", 1],
+        ["a'", 1],
+        ["a'", 1],
+        ["a'", 1],
+        ["g'", 4],
+        ["a'", 1],
+        ["a'", 1],
+        ["a'", 1],
+        ["a'", 1],
+        ["g'", 4],
+        ["f'", 1],
+        ["f'", 1],
+        ["f'", 1],
+        ["f'", 1],
+        ["e'", 2],
+        ["e'", 2],
+        ["d'", 1],
+        ["d'", 1],
+        ["d'", 1],
+        ["d'", 1],
+        ["c'", 4]
+    ]
+}
+
+HAPPY_BIRTHDAY = {
+    "tempo": 100,
+    "beats_per_bar": 3,
+    "upbeat": 1,
+    "led_sequence": [ev3.LED_ORANGE, ev3.LED_GREEN, ev3.LED_RED, ev3.LED_GREEN],
+    "tones": [
+        ["d'", 0.75],
+        ["d'", 0.25],
+        ["e'", 1],
+        ["d'", 1],
+        ["g'", 1],
+        ["f#'", 2],
+        ["d'", 0.75],
+        ["d'", 0.25],
+        ["e'", 1],
+        ["d'", 1],
+        ["a'", 1],
+        ["g'", 2],
+        ["d'", 0.75],
+        ["d'", 0.25],
+        ["d''", 1],
+        ["b'", 1],
+        ["g'", 1],
+        ["f#'", 1],
+        ["e'", 1],
+        ["c''", 0.75],
+        ["c''", 0.25],
+        ["b'", 1],
+        ["g'", 1],
+        ["a'", 1],
+        ["g'", 2]
+    ]
+}
 
 class Jukebox(ev3.EV3):
     """
@@ -99,7 +113,7 @@ class Jukebox(ev3.EV3):
         """
         return self._temperament
     @temperament.setter
-    def temperament(self, value:numbers.Number):
+    def temperament(self, value: float):
         assert isinstance(temperament, numbers.Number), "temperament needs to be a number"
         assert value > 0, "temperament needs to be positive"
         self._temperament = value
@@ -131,72 +145,54 @@ class Jukebox(ev3.EV3):
         assert isinstance(duration, numbers.Number), "duration needs to be a number"
         assert duration >= 0, "duration needs to be positive"
         volume = self._volume
-        if   tone.startswith("c#"):
-            freq = self._temperament * 2**(-8/12)
-        elif tone.startswith("cb"):
-            freq = self._temperament * 2**(-10/12)
+        if tone == "p":
+            self.stop_sound()
+            return
         elif tone.startswith("c"):
             freq = self._temperament * 2**(-9/12)
-        elif tone.startswith("d#"):
-            freq = self._temperament * 2**(-6/12)
-        elif tone.startswith("db"):
-            freq = self._temperament * 2**(-8/12)
         elif tone.startswith("d"):
             freq = self._temperament * 2**(-7/12)
-        elif tone.startswith("e#"):
-            freq = self._temperament * 2**(-4/12)
-        elif tone.startswith("eb"):
-            freq = self._temperament * 2**(-6/12)
         elif tone.startswith("e"):
-            freq = self._temperament * 2**(-5/12)
-        elif tone.startswith("f#"):
-            freq = self._temperament * 2**(-3/12)
-        elif tone.startswith("fb"):
             freq = self._temperament * 2**(-5/12)
         elif tone.startswith("f"):
             freq = self._temperament * 2**(-4/12)
-        elif tone.startswith("g#"):
-            freq = self._temperament * 2**(-1/12)
-        elif tone.startswith("gb"):
-            freq = self._temperament * 2**(-3/12)
         elif tone.startswith("g"):
             freq = self._temperament * 2**(-2/12)
-        elif tone.startswith("a#"):
-            freq = self._temperament * 2**(1/12)
-        elif tone.startswith("ab"):
-            freq = self._temperament * 2**(-1/12)
         elif tone.startswith("a"):
             freq = self._temperament
-        elif tone.startswith("b#"):
-            freq = self._temperament * 2**(3/12)
-        elif tone.startswith("bb"):
-            freq = self._temperament * 2**(1/12)
         elif tone.startswith("b"):
             freq = self._temperament * 2**(2/12)
-        elif tone == "p":
-            pass
         else:
             raise AttributeError('unknown Tone: ' + tone)
 
-        if tone == "p":
-            self.stop_sound()
+        if len(tone) > 1:
+            if tone[1] == "#":
+                freq *= 2**(1/12)
+            elif tone[1] == "b":
+                freq /= 2**(1/12)
+
+        if tone.endswith("'''"):
+            freq *= 4
+        elif tone.endswith("''"):
+            freq *= 2
+        elif tone.endswith("'"):
+            pass
         else:
-            if tone.endswith("'''"):
-                freq *= 4
-            elif tone.endswith("''"):
-                freq *= 2
-            elif tone.endswith("'"):
-                pass
-            else:
-                freq /= 2
-            ops = b''.join([
-                ev3.opSound,
-                ev3.TONE,
-                ev3.LCX(volume),
-                ev3.LCX(round(freq)),
-                ev3.LCX(round(1000*duration))
-            ])
-            self.send_direct_cmd(ops)
+            freq /= 2
+
+        freq = round(freq)
+        if freq < 250:
+            raise AttributeError('tone is too low: ' + tone)
+        if freq > 10000:
+            raise AttributeError('tone is too high: ' + tone)
+        ops = b''.join([
+            ev3.opSound,
+            ev3.TONE,
+            ev3.LCX(volume),
+            ev3.LCX(freq),
+            ev3.LCX(round(1000*duration))
+        ])
+        self.send_direct_cmd(ops)
 
     def stop_sound(self) -> None:
         """
@@ -223,12 +219,28 @@ class Jukebox(ev3.EV3):
         self._pos_led += 1
         self._pos_led %= len(song["led_sequence"])
 
+    def play_song(self, song:dict) -> None:
+        """
+        plays a song
+
+        example:
+        jukebox = ev3_sound.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
+        jukebox.play_song(ev3_sound.HAPPY_BIRTHDAY)
+        """
+        self._init_tone()
+        while True:
+            duration = self._next_tone(song)
+            if duration == -1: break
+            time.sleep(duration)
+        self.stop_sound()
+
     def song(self, song: dict) -> task.Task:
         """
         returns a Task object, that plays a song
 
         example:
-        my_song = ev3_sound.song(ev3_sound.HAPPY_BIRTHDAY)
+        jukebox = ev3_sound.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
+        my_song = jukebox.song(ev3_sound.HAPPY_BIRTHDAY)
         my_song.start()
         """
         tones = task.concat(
