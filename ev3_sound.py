@@ -146,7 +146,7 @@ class Jukebox(ev3.EV3):
         assert duration >= 0, "duration needs to be positive"
         volume = self._volume
         if tone == "p":
-            self.stop_sound()
+            self.stop()
             return
         elif tone.startswith("c"):
             freq = self._temperament * 2**(-9/12)
@@ -194,7 +194,7 @@ class Jukebox(ev3.EV3):
         ])
         self.send_direct_cmd(ops)
 
-    def stop_sound(self) -> None:
+    def stop(self) -> None:
         """
         stops the sound
         """
@@ -232,7 +232,7 @@ class Jukebox(ev3.EV3):
             duration = self._next_tone(song)
             if duration == -1: break
             time.sleep(duration)
-        self.stop_sound()
+        self.stop()
 
     def song(self, song: dict) -> task.Task:
         """
@@ -246,13 +246,13 @@ class Jukebox(ev3.EV3):
         tones = task.concat(
             task.Task(
                 self._init_tone,
-                action_stop=self.stop_sound
+                action_stop=self.stop
             ),
             task.Repeated(
                 self._next_tone,
                 args=(song,)
             ),
-            task.Task(self.stop_sound)
+            task.Task(self.stop)
         )
         colors = task.Periodic(
             60 * song["beats_per_bar"] / song["tempo"],
