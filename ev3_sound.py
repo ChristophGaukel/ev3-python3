@@ -227,12 +227,7 @@ class Jukebox(ev3.EV3):
         jukebox = ev3_sound.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
         jukebox.play_song(ev3_sound.HAPPY_BIRTHDAY)
         """
-        self._init_tone()
-        while True:
-            duration = self._next_tone(song)
-            if duration == -1: break
-            time.sleep(duration)
-        self.stop()
+        self.song(song).start().join()
 
     def song(self, song: dict) -> task.Task:
         """
