@@ -133,12 +133,6 @@ class Task:
         self._action = action
         self._args = kwargs.pop('args', ())
         self._kwargs = kwargs.pop('kwargs', {})
-        self._action_stop = kwargs.pop('action_stop', None)
-        self._args_stop = kwargs.pop('args_stop', ())
-        self._kwargs_stop = kwargs.pop('kwargs_stop', {})
-        self._action_cont = kwargs.pop('action_cont', None)
-        self._args_cont = kwargs.pop('args_cont', ())
-        self._kwargs_cont = kwargs.pop('kwargs_cont', {})
         self._join = kwargs.pop('join', False)
         self._duration = kwargs.pop('duration', None)
         self._num = kwargs.pop('num', 0)
@@ -163,6 +157,12 @@ class Task:
         self._time_called_cont = None
         self._contained = []
         self._cont_join = None
+        self._action_stop = kwargs.pop('action_stop', None)
+        self._args_stop = kwargs.pop('args_stop', ())
+        self._kwargs_stop = kwargs.pop('kwargs_stop', {})
+        self._action_cont = kwargs.pop('action_cont', None)
+        self._args_cont = kwargs.pop('args_cont', ())
+        self._kwargs_cont = kwargs.pop('kwargs_cont', {})
         self._exc = kwargs.pop('exc', self._exc_default)
         self._exc.fire()
         assert not kwargs, 'unknown keyword arguments: ' + str(kwargs.keys())
@@ -248,7 +248,7 @@ class Task:
                 STATE_TO_STOP,
                 STATE_STOPPED,
                 STATE_FINISHED
-            ], "can't start from state " + self._state + ' ' + str(self) + ' ' + str(self._duration)
+            ], "can't start from state " + self._state
             assert self._thread_start is None, "starting is already in progress"
             assert self._thread_cont is None, "continuation is already in progress"
         except Exception as exc:
@@ -261,7 +261,10 @@ class Task:
             else:
                 self._state = STATE_TO_START
             if gap:
-                self._thread_start = threading.Thread(target=self._start2, args=(time.time() + gap,))
+                self._thread_start = threading.Thread(
+                    target=self._start2,
+                    args=(time.time() + gap,)
+                )
             else:
                 self._thread_start = threading.Thread(target=self._start2)
             self._thread_start.start()
@@ -273,22 +276,18 @@ class Task:
 
     def _start2(self, time_action: float=None) -> None:
         if self._state == STATE_TO_STOP:
-            thread_start = self._thread_start
             self._lock.release()
             self._thread.join()
             self._exc.fire()
             self._lock.acquire()
-            if self._state != STATE_TO_START or \
-               not (self._thread_start and self._thread_start is thread_start):
-                self._lock.release()
-                return
-        if time_action:        
+        if not threading.current_thread() is self._thread_start:
+            self._lock.release()
+            return
+        if time_action:
             gap = time_action - time.time()
             if gap > 0:
-                thread_start = self._thread_start
                 self._sleeper.sleep(gap, self._root)
-                if self._state != STATE_TO_START or \
-                   not (self._thread_start and self._thread_start is thread_start):
+                if not threading.current_thread() is self._thread_start:
                     self._lock.release()
                     return
         self._thread = self._thread_start
@@ -356,6 +355,9 @@ class Task:
             self._sleeper.interrupt()
         not_stopped = []
         for task in self._contained:
+            if not task in self._contained_register or \
+               not self._contained_register[task] is self:
+                continue
             task.lock.acquire()
             if task._state in [STATE_TO_START, STATE_STARTED, STATE_TO_CONTINUE]:
                 not_stopped.append(task)
@@ -408,7 +410,10 @@ class Task:
         if gap is None:
             self._thread_cont = threading.Thread(target=self._cont2)
         else:
-            self._thread_cont = threading.Thread(target=self._cont2, args=(time.time() + gap,))
+            self._thread_cont = threading.Thread(
+                target=self._cont2,
+                args=(self._time_called_cont + gap,)
+            )
         if self._state is STATE_STOPPED:
             self._state = STATE_TO_CONTINUE
         self._thread_cont.start()
@@ -416,45 +421,42 @@ class Task:
 
     def _cont2(self, time_action: float=None) -> None:
         if self._state == STATE_TO_STOP:
-            thread_cont = self._thread_cont
             self._lock.release()
             self._thread.join()
             self._exc.fire()
             self._lock.acquire()
-            if self._state != STATE_TO_CONTINUE or \
-               not (self._thread_cont and self._thread_cont is thread_cont):
-                self._lock.release()
-                return
+        if not threading.current_thread() is self._thread_cont:
+            self._lock.release()
+            return
+        now = time.time()
         if self._restart:
+            self._restart = False
             self._actual = self
             self._contained = []
-            self._restart = False
-        next_time_action = self.time_action_no_lock
-        if next_time_action is None:
-            next_time_action = time.time()
-        if time_action:        
-            gap = time_action - time.time()
+            self._time_action = now
+            if self._duration:
+                self._time_end = self._time_action + self._duration
+            else:
+                self._time_end = None
+            next_time_action = now
         else:
-            gap = next_time_action - time.time() + self._time_called_cont - self._time_called_stop
-        if gap > 0:
-            thread_cont = self._thread_cont
-            self._sleeper.sleep(gap, self)
-            if self._state != STATE_TO_CONTINUE or \
-               not (self._thread_cont and self._thread_cont is thread_cont):
-                self._lock.release()
-                return
-        if self._action_cont:
-            self._action_cont(*self._args_cont, **self._kwargs_cont)
+            next_time_action = self.time_action_no_lock
+            if time_action:
+                gap = time_action - now
+            else:
+                gap = next_time_action - now + self._time_called_cont - self._time_called_stop
+            if gap > 0:
+                self._sleeper.sleep(gap, self)
+                if not threading.current_thread() is self._thread_cont:
+                    self._lock.release()
+                    return
+            if self._action_cont:
+                self._action_cont(*self._args_cont, **self._kwargs_cont)
         self._state = STATE_STARTED
         self._time_called_stop = None
         self._thread = self._thread_cont
         self._thread_cont = None
-        if self._actual:
-            time_delta = time.time() - next_time_action
-            if self._time_action:
-                self._time_action += time_delta
-            if self._actual._time_end:
-                self._actual._time_end += time_delta
+        time_delta = time.time() - next_time_action
         if self._contained:
             for task in self._contained:
                 if task._state is STATE_FINISHED:
@@ -466,7 +468,7 @@ class Task:
                 if task_time_action is None:
                     gap = 0
                 else:
-                    gap = task.time_action - next_time_action
+                    gap = task_time_action - next_time_action
                 task.cont(gap=gap)
             if self._cont_join:
                 self._activity = ACTIVITY_JOIN
@@ -476,33 +478,27 @@ class Task:
                 self._lock.acquire()
                 self._activity = ACTIVITY_NONE
                 if self._state != STATE_STARTED:
-                    self._join_contained()
                     self._final()
                     return
         if self._actual:
+            if self._actual._time_end:
+                self._actual._time_end += time_delta
             if self._time_action:
+                self._time_action += time_delta
                 gap_action = self._time_action - time.time()
                 if gap_action > 0:
                     self._sleeper.sleep(gap_action, self)
                     if self._state != STATE_STARTED:
-                        self._join_contained()
                         self._final()
                         return
             self._actual._execute()
         else:
-            self._contained = self._join_contained()
-            if self._root._state is STATE_STARTED or \
-               self._root._state is STATE_TO_STOP and not self._contained:
-                if self._root in self._contained_register:
-                    self._contained_register.pop(self._root)
-                self._root._state = STATE_FINISHED
             self._final()
 
     def _execute(self) -> None:
         while True:
             if self._root._state != STATE_STARTED:
-                self._contained = self._join_contained()
-                self._final()
+                self._final(outstand=True)
                 return
             try:
                 gap = self._wrapper()
@@ -516,7 +512,7 @@ class Task:
             if gap == 0:
                 self._root._time_action = time.time()
                 continue
-            if not self._root._time_action or self._netto_time:
+            if self._netto_time:
                 self._root._time_action = time.time() + gap
                 real_gap = gap
             else:
@@ -524,8 +520,7 @@ class Task:
                 real_gap = self._root._time_action - time.time()
             if real_gap > 0:
                 if self._root._state != STATE_STARTED:
-                    self._contained = self._join_contained()
-                    self._final()
+                    self._final(outstand=True)
                     return
                 self._root._sleeper.sleep(real_gap, self._root)
         if self._time_end:
@@ -543,14 +538,7 @@ class Task:
                 self._next._time_end = self._root._time_action + self._next._duration
             self._next._execute()
         else:
-            self._root._actual = None
-            self._root._time_action = None
-            self._contained = self._join_contained()
-            if self._root._state is STATE_STARTED or \
-               self._root._state is STATE_TO_STOP and not self._contained:
-                self._root._state = STATE_FINISHED
             self._final()
-            return
 
     def _wrapper(self) -> int:
         self._wrapper1()
@@ -566,15 +554,13 @@ class Task:
             name = self._action.__name__
             if (self._join or name is "join"):
                 self._root._cont_join = task
-            else:
-                self._root._cont_join = None
             if name in ["start", "cont"]:
                 if not task in self._root._contained:
                     self._root._contained.append(task)
                 self._contained_register.update({task: self._root})
         if not hasattr(self._action, '__self__') or \
            not isinstance(self._action.__self__, Task) or \
-           not self._action.__name__ in ["start", "cont"] or \
+           not self._action.__name__ in ["start", "cont", "stop"] or \
            self._action.__name__ == "start" and self._join:
             self._root._activity = ACTIVITY_BUSY
             self._root._lock.release()
@@ -585,7 +571,7 @@ class Task:
             self._action.__self__._thread.join()
         if not hasattr(self._action, '__self__') or \
            not isinstance(self._action.__self__, Task) or \
-           not self._action.__name__ in ["start", "cont"] or \
+           not self._action.__name__ in ["start", "cont", "stop"] or \
            self._action.__name__ == "start" and self._join:
             self._root._exc.fire()
             self._root._lock.acquire()
@@ -596,34 +582,46 @@ class Task:
             task = self._action.__self__
             name = self._action.__name__
             state = task.state
-            if state == STATE_FINISHED and self._root._cont_join:
+            if self._root._cont_join and \
+               (self._root._state == STATE_STARTED or \
+                state == STATE_FINISHED):
                 self._root._cont_join = None
-            if (state == STATE_FINISHED or name == "stop"):
-                if task in self._root._contained:
-                    self._root._contained.remove(task)
-                if task in self._contained_register:
-                    self._contained_register.pop(task)
+            if (state == STATE_FINISHED or name == "stop") and \
+               task in self._root._contained:
+                self._root._contained.remove(task)
+            if name == "stop" and \
+               task in self._contained_register:
+                self._contained_register.pop(task)
 
-    def _final(self) -> bool:
-        if self._root._thread_start:
-            self._root._contained = self._join_contained()
-            self._root._actual = None
-            self._root._time_action = None
-            self._root._state = STATE_TO_START
-        elif self._root._state is STATE_FINISHED:
+    def _final(self, outstand=False) -> None:
+        self._root._contained = self._join_contained()
+        if self._root._state == STATE_STARTED:
+            self._root._state = STATE_FINISHED
+        elif self._root._state == STATE_TO_STOP and \
+           not self._next and \
+           not self._root._contained and \
+           not outstand:
+            self._root._state = STATE_FINISHED
+        if self._root._state == STATE_FINISHED:
+            if self._root in self._contained_register:
+                self._contained_register.pop(self._root)
             self._root._thread_cont = None
             self._root._actual = None
             self._root._time_action = None
         else:
-            self._root._contained = self._join_contained()
+            if not self._next and not outstand:
+                self._root._actual = None
+                self._root._time_action = None
             if self._root._action_stop:
                 self._root._action_stop(
                     *self._root._args_stop,
                     **self._root._kwargs_stop
                 )
-            if self._root._time_action and self._root._time_action < time.time():
+            if self._root._thread_start:
+                self._root._actual = None
                 self._root._time_action = None
-            if self._root._thread_cont:
+                self._root._state = STATE_TO_START
+            elif self._root._thread_cont:
                 self._root._state = STATE_TO_CONTINUE
             else:
                 self._root._state = STATE_STOPPED
@@ -636,7 +634,7 @@ class Task:
         not_finished = []
         for task in contained:
             if not task in self._contained_register or \
-               self._contained_register[task] != self._root:
+               not self._contained_register[task] is self._root:
                 continue
             task.join()
             if task.state != STATE_FINISHED:
@@ -645,33 +643,6 @@ class Task:
         self._root._lock.acquire()
         self._root._activity = ACTIVITY_NONE
         return not_finished
-
-    @property
-    def thread(self) -> threading.Thread:
-        """
-        the tasks thread (returns None if there is none)
-        """
-        with self._lock:
-            value = self.thread_no_lock
-        return value
-
-    @property
-    def thread_no_lock(self) -> threading.Thread:
-        """
-        the tasks thread (returns None if there is none)
-        """
-        try:
-            assert self._root is self, "only root tasks can be asked about their thread"
-        except Exception as exc:
-            self._root._exc.put(exc)
-            raise
-        self._exc.fire()
-        if self._thread_start:
-            return self._thread_start
-        if self._thread_cont:
-            return self._thread_cont
-        else:
-            return self._thread
 
     @property
     def lock(self) -> threading.Lock:
@@ -757,15 +728,6 @@ class Task:
         time of actual (activity is ACTIVITY_BUSY) or next action 
         is in the format of time.time()
         """
-        # print("inside time_action_no_lock, self: {}, state: {}, time_action: {}, time: {}".format(
-        #     self,
-        #     self._state,
-        #     self._time_action,
-        #     time.time()
-        # ))
-        # print("_contained", self._contained)
-        # min = None
-        # print("_actual:", self._actual)
         min = self._time_action
         for task in self._contained:
             if not task in self._contained_register or \
@@ -1008,6 +970,8 @@ class Periodic(Task):
         """
         self._intervall = intervall
         self._netto_time = kwargs.pop('netto_time', False)
+        assert not 'join' in kwargs, \
+            "no keyword argument 'join' for instances of class Periodic"
         if hasattr(action, '__self__') and \
            isinstance(action.__self__, Task) and \
            action.__name__ == "start":
@@ -1015,9 +979,11 @@ class Periodic(Task):
         else:
             kwargs.update({'join': False})
         super().__init__(action, **kwargs)
-        assert isinstance(self._intervall, numbers.Number), 'intervall must be a number' + intervall
+        assert isinstance(self._intervall, numbers.Number), \
+            'intervall must be a number' + intervall
         assert self._intervall >= 0, 'intervall must be positive'
-        assert isinstance(self._netto_time, bool), 'netto_time must be a bool value'
+        assert isinstance(self._netto_time, bool), \
+            'netto_time must be a bool value'
 
     def _wrapper(self):
         self._wrapper1()
@@ -1076,6 +1042,8 @@ class Repeated(Task):
         task.Repeated(do_something, num=3).start()
         """
         self._netto_time = kwargs.pop('netto_time', False)
+        assert not 'join' in kwargs, \
+            "no keyword argument 'join' for instances of class Periodic"
         if hasattr(action, '__self__') and \
            isinstance(action.__self__, Task) and \
            action.__name__ == "start":
@@ -1083,7 +1051,8 @@ class Repeated(Task):
         else:
             kwargs.update({'join': False})
         super().__init__(action, **kwargs)
-        assert isinstance(self._netto_time, bool), 'netto_time must be a bool value'
+        assert isinstance(self._netto_time, bool), \
+            'netto_time must be a bool value'
 
     def _wrapper(self):
         self._wrapper1()
