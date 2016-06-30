@@ -219,16 +219,6 @@ class Jukebox(ev3.EV3):
         self._pos_led += 1
         self._pos_led %= len(song["led_sequence"])
 
-    def play_song(self, song:dict) -> None:
-        """
-        plays a song
-
-        example:
-        jukebox = ev3_sound.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
-        jukebox.play_song(ev3_sound.HAPPY_BIRTHDAY)
-        """
-        self.song(song).start().join()
-
     def song(self, song: dict) -> task.Task:
         """
         returns a Task object, that plays a song
