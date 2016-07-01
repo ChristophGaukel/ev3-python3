@@ -638,21 +638,27 @@ class TwoWheelVehicle(ev3.EV3):
             "exc needs to be an ExceptionHandler"
         if not exc:
             exc = task.Task._exc_default
+
+        class _Drive(task.Task):
+            def stop(self):
+                super().stop()
+                self._time_action = time.time()
+
         if drive_type == DRIVE_TYPE_STRAIGHT:
-            t = task.Task(
+            t = _Drive(
                     self._drive_straight,
                     args=(speed, distance),
-                    action_stop=self._vehicle_stop,
+                    action_stop=self.stop,
                     action_cont=self._vehicle_cont,
                     exc=exc
             )
             if distance != None:
                 t.append(task.Repeated(self._test_pos))
         elif drive_type == DRIVE_TYPE_TURN:
-            t = task.Task(
+            t = _Drive(
                     self._drive_turn,
                     args=(speed, radius_turn, angle, right_turn),
-                    action_stop=self._vehicle_stop,
+                    action_stop=self.stop,
                     action_cont=self._vehicle_cont,
                     exc=exc
             )
@@ -660,10 +666,10 @@ class TwoWheelVehicle(ev3.EV3):
                 t.append(task.Repeated(self._test_o))
         elif drive_type == DRIVE_TYPE_ROTATE_TO:
             t = task.concat(
-                task.Task(
+                _Drive(
                     self._rotate_to,
                     args=(speed, orientation),
-                    action_stop=self._vehicle_stop,
+                    action_stop=self.stop,
                     action_cont=self._vehicle_cont,
                     exc=exc
                 ),
@@ -671,10 +677,10 @@ class TwoWheelVehicle(ev3.EV3):
             )
         elif drive_type == DRIVE_TYPE_DRIVE_TO:
             t = task.concat(
-                task.Task(
+                _Drive(
                     self._drive_to_1,
                     args=(speed, pos_x, pos_y),
-                    action_stop=self._vehicle_stop,
+                    action_stop=self.stop,
                     action_cont=self._vehicle_cont,
                     exc=exc,
                 ),
@@ -697,12 +703,7 @@ class TwoWheelVehicle(ev3.EV3):
         else:
             return task.Task(t.start, join=True, exc=exc)
 
-    def _vehicle_stop(self) -> None:
-        self.stop()
-
     def _vehicle_cont(self):
         self.move(self._speed, self._turn)
         self._to_stop = False
         self._last_t = None
-        
-        
