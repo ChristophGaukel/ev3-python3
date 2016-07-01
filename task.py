@@ -456,7 +456,12 @@ class Task:
         self._time_called_stop = None
         self._thread = self._thread_cont
         self._thread_cont = None
-        time_delta = time.time() - next_time_action
+        if self._actual:
+            time_delta = time.time() - next_time_action
+            if self._time_action:
+                self._time_action += time_delta
+            if self._actual._time_end:
+                self._actual._time_end += time_delta
         if self._contained:
             for task in self._contained:
                 if task._state is STATE_FINISHED:
@@ -481,10 +486,7 @@ class Task:
                     self._final()
                     return
         if self._actual:
-            if self._actual._time_end:
-                self._actual._time_end += time_delta
             if self._time_action:
-                self._time_action += time_delta
                 gap_action = self._time_action - time.time()
                 if gap_action > 0:
                     self._sleeper.sleep(gap_action, self)
@@ -560,7 +562,7 @@ class Task:
                 self._contained_register.update({task: self._root})
         if not hasattr(self._action, '__self__') or \
            not isinstance(self._action.__self__, Task) or \
-           not self._action.__name__ in ["start", "cont", "stop"] or \
+           not self._action.__name__ in ["start", "cont"] or \
            self._action.__name__ == "start" and self._join:
             self._root._activity = ACTIVITY_BUSY
             self._root._lock.release()
@@ -571,7 +573,7 @@ class Task:
             self._action.__self__._thread.join()
         if not hasattr(self._action, '__self__') or \
            not isinstance(self._action.__self__, Task) or \
-           not self._action.__name__ in ["start", "cont", "stop"] or \
+           not self._action.__name__ in ["start", "cont"] or \
            self._action.__name__ == "start" and self._join:
             self._root._exc.fire()
             self._root._lock.acquire()
@@ -625,6 +627,8 @@ class Task:
                 self._root._state = STATE_TO_CONTINUE
             else:
                 self._root._state = STATE_STOPPED
+        if self._root._time_action and self._root._time_action < time.time():
+            self._root._time_action = None
         self._root._lock.release()
 
     def _join_contained(self) -> list:
