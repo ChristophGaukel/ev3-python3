@@ -144,7 +144,6 @@ class Jukebox(ev3.EV3):
         """
         assert isinstance(duration, numbers.Number), "duration needs to be a number"
         assert duration >= 0, "duration needs to be positive"
-        volume = self._volume
         if tone == "p":
             self.stop()
             return
@@ -188,11 +187,63 @@ class Jukebox(ev3.EV3):
         ops = b''.join([
             ev3.opSound,
             ev3.TONE,
-            ev3.LCX(volume),
+            ev3.LCX(self._volume),
             ev3.LCX(freq),
             ev3.LCX(round(1000*duration))
         ])
         self.send_direct_cmd(ops)
+
+    def sound(self, path: str, duration: float=None, repeat: bool=False) -> task.Task:
+        """
+        returns a Task object, that plays a sound file
+
+        Attributes:
+        path: name of the sound file (without extension ".rsf")
+
+        Keyword Attributes:
+        duration: duration of the sound file (in sec.)
+        repeat: flag, if repeatedly playing
+        """
+        if repeat:
+            ops = b''.join([
+                ev3.opSound,
+                ev3.REPEAT,
+                ev3.LCX(self._volume), # VOLUME
+                ev3.LCS(path)          # NAME
+            ])
+        else:
+            ops = b''.join([
+                ev3.opSound,
+                ev3.PLAY,
+                ev3.LCX(self._volume), # VOLUME
+                ev3.LCS(path)          # NAME
+            ])
+        if not duration:
+            return task.Task(
+                self.send_direct_cmd,
+                args=(ops,)
+            )
+        elif repeat:
+            t_inner = task.concat(
+                task.Task(
+                    self.send_direct_cmd,
+                    args=(ops,),
+                    duration=duration,
+                    action_stop=self.stop,
+                    action_cont=self.send_direct_cmd,
+                    args_cont=(ops,)
+                ),
+                task.Task(self.stop)
+            )
+            return task.Task(t_inner.start, join=True)
+        else:
+            t_inner = task.Task(
+                self.send_direct_cmd,
+                args=(ops,),
+                duration=duration,
+                action_stop=self.stop,
+            )
+            return task.Task(t_inner.start, join=True)
 
     def stop(self) -> None:
         """
