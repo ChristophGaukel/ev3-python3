@@ -75,8 +75,7 @@ class PID():
                  gain_prop: float,
                  gain_der: float=None,
                  gain_int: float=None,
-                 half_life_val: float=None,
-                 half_life_int: float=None
+                 half_life: float=None
     ):
         """
         Parametrizes a new PID controller
@@ -89,15 +88,13 @@ class PID():
         Keyword Arguments:
         gain_der: gain of the derivative part [s], decreases overshooting and settling time
         gain_int: gain of the integrative part [1/s], eliminates steady-state error, slower and smoother response
-        half_life_val: used for discrete or noisy systems, smooths actual values [s]
-        half_life_int: used for dynamic systems, reduces memory of the integrative part [s]
+        half_life: used for discrete or noisy systems, smooths actual values [s]
         """
         self._setpoint = setpoint
         self._gain_prop = gain_prop
         self._gain_int = gain_int
         self._gain_der = gain_der
-        self._half_life_val = half_life_val
-        self._half_life_int = half_life_int
+        self._half_life = half_life
         self._error = None
         self._time = None
         self._int = None
@@ -123,22 +120,17 @@ class PID():
             time_act = time.time()
             delta_time = time_act - self._time
             self._time = time_act
-            if self._half_life_val is None:
+            if self._half_life is None:
                 self._value = actual_value
             else:
-                fact1 = math.log(2) / self._half_life_val
+                fact1 = math.log(2) / self._half_life
                 fact2 = math.exp(-fact1 * delta_time)
                 self._value = fact2 * self._value + actual_value * (1 - fact2)
             error = self._setpoint - self._value
             if self._gain_int is None:
                 signal_int = 0
             else:
-                if self._half_life_int is None:
-                    self._int += error * delta_time
-                else:
-                    fact1 = math.log(2) / self._half_life_int
-                    fact2 = math.exp(-fact1 * delta_time)
-                    self._int = fact2 * self._int + error * (1 - fact2)
+                self._int += error * delta_time
                 signal_int = self._gain_int * self._int
             if self._gain_der is None:
                 signal_der = 0
@@ -207,6 +199,9 @@ class _MessageCounter:
         else:
             self._cnt = 1
             return self._cnt
+
+class DirCmdError(Exception):
+    pass
 
 # pylint: disable=too-many-arguments
 class EV3:
@@ -460,7 +455,7 @@ class EV3:
                 reply = self._socket.recv(1024)
             else:
                 reply = bytes(self._device.read(_EP_IN, 1024, 0))
-            global_mem = struct.unpack('<H', reply[:2])[0] - 3
+            len_data = struct.unpack('<H', reply[:2])[0] + 2
             reply_counter = reply[2:4]
             if self._verbosity >= 1:
                 now = datetime.datetime.now().strftime('%H:%M:%S.%f')
@@ -472,16 +467,16 @@ class EV3:
                       '|' + \
                       ':'.join('{:02X}'.format(byte) for byte in reply[4:5]) + \
                       '|', end='')
-                if global_mem > 0:
-                    dat = ':'.join('{:02X}'.format(byte) for byte in reply[5:global_mem + 5])
+                if len_data > 5:
+                    dat = ':'.join('{:02X}'.format(byte) for byte in reply[5:len_data])
                     print(dat + '|')
                 else:
                     print()
             if counter != reply_counter:
-                self._foreign.put(reply_counter, reply)
+                self._foreign.put(reply_counter, reply[:len_data])
             else:
                 self._lock.release()
-                return reply[:global_mem + 5]
+                return reply[:len_data]
 
 WIFI      = 'Wifi'                      
 BLUETOOTH = 'Bluetooth'
