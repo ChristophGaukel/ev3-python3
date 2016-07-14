@@ -66,6 +66,9 @@ class ExceptionHandler:
     def put(self, exc: Exception):
         """
         informs, that an exception occured
+
+        Arguments:
+        exc: Exception, ignored, but subclasses may distinguish
         """
         self._exc = True
 
@@ -154,7 +157,6 @@ class Task:
         self._activity = ACTIVITY_NONE
         self._time_action = None
         self._time_called_stop = None
-        self._time_called_cont = None
         self._contained = []
         self._cont_join = None
         self._action_stop = kwargs.pop('action_stop', None)
@@ -235,6 +237,8 @@ class Task:
     def start(self, gap: float=0) -> 'Task':
         """
         starts execution of task (finished or stopped tasks may be started again)
+
+        Keyword Arguments:
         gap: sets the waiting time, before start occurs (in seconds)
         """
         self._root._exc.fire()
@@ -359,7 +363,7 @@ class Task:
                not self._contained_register[task] is self:
                 continue
             task.lock.acquire()
-            if task._state in [STATE_TO_START, STATE_STARTED, STATE_TO_CONTINUE]:
+            if task._state in [STATE_STARTED, STATE_TO_START, STATE_TO_CONTINUE]:
                 not_stopped.append(task)
             elif task._state == STATE_TO_STOP and (task._thread_start or task._thread_cont):
                 not_stopped.append(task)
@@ -381,6 +385,8 @@ class Task:
     def cont(self, gap: float=None) -> 'Task':
         """
         continues a stopped task (must be a root task)
+
+        Keyword Arguments:
         gap: sets the waiting time before the next action occurs (in seconds)
         """
         self._exc.fire()
@@ -406,21 +412,20 @@ class Task:
         if self._state == STATE_FINISHED:
             self._lock.release()
             return self
-        self._time_called_cont = time.time()
         if gap is None:
             self._thread_cont = threading.Thread(target=self._cont2)
         else:
             self._thread_cont = threading.Thread(
                 target=self._cont2,
-                args=(self._time_called_cont + gap,)
+                kwargs={"time_cont": time.time() + gap}
             )
-        if self._state is STATE_STOPPED:
-            self._state = STATE_TO_CONTINUE
         self._thread_cont.start()
         return self
 
-    def _cont2(self, time_action: float=None) -> None:
-        if self._state == STATE_TO_STOP:
+    def _cont2(self, time_cont: float=None, time_delta: float=None) -> None:
+        if self._state == STATE_STOPPED:
+            self._state = STATE_TO_CONTINUE
+        elif self._state == STATE_TO_STOP:
             self._lock.release()
             self._thread.join()
             self._exc.fire()
@@ -428,40 +433,42 @@ class Task:
         if not threading.current_thread() is self._thread_cont:
             self._lock.release()
             return
-        now = time.time()
-        if self._restart:
-            self._restart = False
-            self._actual = self
-            self._contained = []
-            self._time_action = now
-            if self._duration:
-                self._time_end = self._time_action + self._duration
-            else:
-                self._time_end = None
-            next_time_action = now
-        else:
-            next_time_action = self.time_action_no_lock
-            if time_action:
-                gap = time_action - now
-            else:
-                gap = next_time_action - now + self._time_called_cont - self._time_called_stop
+        if time_cont:
+            gap = time_cont - time.time()
             if gap > 0:
                 self._sleeper.sleep(gap, self)
                 if not threading.current_thread() is self._thread_cont:
                     self._lock.release()
                     return
+        if self._restart:
+            self._restart = False
+            self._actual = self
+            self._contained = []
+            self._time_action = time.time()
+            if self._duration:
+                self._time_end = self._time_action + self._duration
+            else:
+                self._time_end = None
+        else:
             if self._action_cont:
                 self._action_cont(*self._args_cont, **self._kwargs_cont)
+            if not time_cont and not time_delta:
+                time_delta = time.time() - self._time_called_stop
+            elif time_cont:
+                next_time_action = self.time_action_no_lock
+                if next_time_action:
+                    time_delta = time.time() - next_time_action
+                else:
+                    time_delta = -1
+            if self._actual:
+                if self._time_action:
+                    self._time_action += time_delta
+                if self._actual._time_end:
+                    self._actual._time_end += time_delta
         self._state = STATE_STARTED
         self._time_called_stop = None
         self._thread = self._thread_cont
         self._thread_cont = None
-        if self._actual:
-            time_delta = time.time() - next_time_action
-            if self._time_action:
-                self._time_action += time_delta
-            if self._actual._time_end:
-                self._actual._time_end += time_delta
         if self._contained:
             for task in self._contained:
                 if task._state is STATE_FINISHED:
@@ -469,12 +476,12 @@ class Task:
                 if not task in self._contained_register or \
                    self._contained_register[task] != self:
                     continue
-                task_time_action = task.time_action
-                if task_time_action is None:
-                    gap = 0
-                else:
-                    gap = task_time_action - next_time_action
-                task.cont(gap=gap)
+                task._lock.acquire()
+                task._thread_cont = threading.Thread(
+                    target=task._cont2,
+                    kwargs={'time_delta': time_delta}
+                )
+                task._thread_cont.start()
             if self._cont_join:
                 self._activity = ACTIVITY_JOIN
                 self._lock.release()
@@ -599,11 +606,16 @@ class Task:
         self._root._contained = self._join_contained()
         if self._root._state == STATE_STARTED:
             self._root._state = STATE_FINISHED
-        elif self._root._state == STATE_TO_STOP and \
-           not self._next and \
-           not self._root._contained and \
-           not outstand:
-            self._root._state = STATE_FINISHED
+        elif self._root._state == STATE_TO_STOP:
+            if self._root._action_stop:
+                self._root._action_stop(
+                    *self._root._args_stop,
+                    **self._root._kwargs_stop
+                )
+            if not self._next and \
+               not self._root._contained and \
+               not outstand:
+                self._root._state = STATE_FINISHED
         if self._root._state == STATE_FINISHED:
             if self._root in self._contained_register:
                 self._contained_register.pop(self._root)
@@ -614,11 +626,6 @@ class Task:
             if not self._next and not outstand:
                 self._root._actual = None
                 self._root._time_action = None
-            if self._root._action_stop:
-                self._root._action_stop(
-                    *self._root._args_stop,
-                    **self._root._kwargs_stop
-                )
             if self._root._thread_start:
                 self._root._actual = None
                 self._root._time_action = None
