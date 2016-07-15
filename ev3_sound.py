@@ -218,13 +218,31 @@ class Jukebox(ev3.EV3):
                 ev3.LCX(self._volume), # VOLUME
                 ev3.LCS(path)          # NAME
             ])
-        if not duration:
+        if not repeat and not duration:
             return task.Task(
                 self.send_direct_cmd,
                 args=(ops,)
             )
-        elif repeat:
-            class TaskSoundRepeated(task.Task):
+        elif not repeat and duration:
+            t_inner = task.Task(
+                self.send_direct_cmd,
+                args=(ops,),
+                duration=duration,
+                action_stop=self.stop
+            )
+            return task.Task(t_inner.start, join=True)
+        elif repeat and not duration:
+            t_inner = task.Task(
+                self.send_direct_cmd,
+                args=(ops,),
+                action_stop=self.stop,
+                action_cont=self.send_direct_cmd,
+                args_cont=(ops,),
+                duration=999999999
+            )
+            return task.Repeated(t_inner.start)
+        elif repeat and duration:
+            class _Task(task.Task):
                 def _final(self, **kwargs):
                     super()._final(**kwargs)
                     if self._root._time_action:
@@ -235,7 +253,7 @@ class Jukebox(ev3.EV3):
                     super()._cont2(**kwargs)
 
             t_inner = task.concat(
-                TaskSoundRepeated(
+                _Task(
                     self.send_direct_cmd,
                     args=(ops,),
                     duration=duration,
@@ -243,15 +261,7 @@ class Jukebox(ev3.EV3):
                     action_cont=self.send_direct_cmd,
                     args_cont=(ops,)
                 ),
-                TaskSoundRepeated(self.stop)
-            )
-            return task.Task(t_inner.start, join=True)
-        else:
-            t_inner = task.Task(
-                self.send_direct_cmd,
-                args=(ops,),
-                duration=duration,
-                action_stop=self.stop
+                _Task(self.stop)
             )
             return task.Task(t_inner.start, join=True)
 
