@@ -236,8 +236,6 @@ class Jukebox(ev3.EV3):
                 self.send_direct_cmd,
                 args=(ops,),
                 action_stop=self.stop,
-                action_cont=self.send_direct_cmd,
-                args_cont=(ops,),
                 duration=999999999
             )
             return task.Repeated(t_inner.start)
