@@ -224,12 +224,18 @@ class Jukebox(ev3.EV3):
                 args=(ops,)
             )
         elif repeat:
-            class SoundRepeatedTask(task.Task):
-                def _cont2(self, time_delta:float=None):
-                    super()._cont2()
+            class TaskSoundRepeated(task.Task):
+                def _final(self, **kwargs):
+                    super()._final(**kwargs)
+                    if self._root._time_action:
+                        self._root._time_rest = self._root._time_action - time.time()
+                        self._root._time_action -= self._root._time_rest
+                def _cont2(self, **kwargs):
+                    self._time_action += self._time_rest
+                    super()._cont2(**kwargs)
 
             t_inner = task.concat(
-                SoundRepeatedTask(
+                TaskSoundRepeated(
                     self.send_direct_cmd,
                     args=(ops,),
                     duration=duration,
@@ -237,7 +243,7 @@ class Jukebox(ev3.EV3):
                     action_cont=self.send_direct_cmd,
                     args_cont=(ops,)
                 ),
-                task.Task(self.stop)
+                TaskSoundRepeated(self.stop)
             )
             return task.Task(t_inner.start, join=True)
         else:
