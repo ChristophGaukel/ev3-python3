@@ -454,7 +454,7 @@ class Task:
                 self._action_cont(*self._args_cont, **self._kwargs_cont)
             if not time_cont and not time_delta:
                 time_delta = time.time() - self._time_called_stop
-            elif time_cont:
+            elif not time_delta:
                 next_time_action = self.time_action_no_lock
                 if next_time_action:
                     time_delta = time.time() - next_time_action
@@ -479,7 +479,7 @@ class Task:
                 task._lock.acquire()
                 task._thread_cont = threading.Thread(
                     target=task._cont2,
-                    kwargs={'time_delta': time_delta}
+                    kwargs={'time_cont': time_cont, 'time_delta': time_delta}
                 )
                 task._thread_cont.start()
             if self._cont_join:
