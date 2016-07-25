@@ -50,6 +50,7 @@ class _Sleeper:
         """
         if self._timer != None:
             self._timer.cancel()
+            self._timer = None
 
     def _do_nothing(self): pass
 
@@ -458,6 +459,8 @@ class Task:
                 next_time_action = self.time_action_no_lock
                 if next_time_action:
                     time_delta = time.time() - next_time_action
+                elif self._time_end:
+                    time_delta = time.time() - self._time_called_stop
                 else:
                     time_delta = -1
             if self._actual:
@@ -465,6 +468,8 @@ class Task:
                     self._time_action += time_delta
                 if self._actual._time_end:
                     self._actual._time_end += time_delta
+            elif self._time_end:
+                self._time_end += time_delta
         self._state = STATE_STARTED
         self._time_called_stop = None
         self._thread = self._thread_cont
@@ -494,14 +499,22 @@ class Task:
                     return
         if self._actual:
             if self._time_action:
-                gap_action = self._time_action - time.time()
-                if gap_action > 0:
-                    self._sleeper.sleep(gap_action, self)
+                gap = self._time_action - time.time()
+                if gap > 0:
+                    self._sleeper.sleep(gap, self)
                     if self._state != STATE_STARTED:
                         self._final()
                         return
             self._actual._execute()
         else:
+            if self._time_end:
+                gap = self._time_end  - time.time()
+                if gap > 0:
+                    self._sleeper.sleep(gap, self)
+                    if self._state != STATE_STARTED:
+                        self._final()
+                        return
+            self._time_end = None
             self._final()
 
     def _execute(self) -> None:
@@ -534,15 +547,20 @@ class Task:
                 self._root._sleeper.sleep(real_gap, self._root)
         if self._time_end:
             self._root._time_action = self._time_end
-            self._time_end = None
             gap = self._root._time_action - time.time()
-            if self._root._state is STATE_STARTED and gap > 0:
+            if self._root._state == STATE_STARTED and gap > 0:
                 self._root._sleeper.sleep(gap, self._root)
+            if self._root._state == STATE_STARTED:
+                self._time_end = None
+            elif not self is self._root:
+                self._root._time_end = self._time_end
+                self._time_end = None
         else:
             self._root._time_action = time.time()
         if self._next:
             self._root._actual = self._next
             self._next._cnt = 0
+            self._root._time_end = None
             if self._next._duration != None:
                 self._next._time_end = self._root._time_action + self._next._duration
             self._next._execute()
@@ -607,15 +625,16 @@ class Task:
         if self._root._state == STATE_STARTED:
             self._root._state = STATE_FINISHED
         elif self._root._state == STATE_TO_STOP:
-            if self._root._action_stop:
+            if not self._next and \
+               not self._root._contained and \
+               not self._root._time_end and \
+               not outstand:
+                self._root._state = STATE_FINISHED
+            elif self._root._action_stop:
                 self._root._action_stop(
                     *self._root._args_stop,
                     **self._root._kwargs_stop
                 )
-            if not self._next and \
-               not self._root._contained and \
-               not outstand:
-                self._root._state = STATE_FINISHED
         if self._root._state == STATE_FINISHED:
             if self._root in self._contained_register:
                 self._contained_register.pop(self._root)
