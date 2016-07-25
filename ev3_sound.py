@@ -236,9 +236,11 @@ class Jukebox(ev3.EV3):
                 self.send_direct_cmd,
                 args=(ops,),
                 action_stop=self.stop,
+                action_cont=self.send_direct_cmd,
+                args_cont=(ops,),
                 duration=999999999
             )
-            return task.Repeated(t_inner.start)
+            return task.Task(t_inner.start, join=True)
         elif repeat and duration:
             class _Task(task.Task):
                 def _final(self, **kwargs):
