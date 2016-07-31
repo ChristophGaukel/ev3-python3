@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
-"""
-EV3 vehicle
-"""
+# Copyright: 2016 Christoph Gaukel <christoph.gaukel@gmx.de>
+
+# This software may be used and distributed according to the terms of
+# the GNU General Public License (GPL), version 3, or at your option
+# any later version.
 
 import ev3, task, math, struct, time, numbers, typing
 

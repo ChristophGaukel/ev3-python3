@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+# Copyright: 2016 Christoph Gaukel <christoph.gaukel@gmx.de>
+
+# This software may be used and distributed according to the terms of
+# the GNU General Public License (GPL), version 3, or at your option
+# any later version.
+
 import typing, numbers, threading, time, datetime, sys
 
 STATE_INIT = 'INIT'
