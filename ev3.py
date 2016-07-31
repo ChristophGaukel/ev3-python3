@@ -4,6 +4,12 @@
 LEGO EV3 direct commands
 """
 
+# Copyright: 2016 Christoph Gaukel <christoph.gaukel@gmx.de>
+
+# This software may be used and distributed according to the terms of
+# the GNU General Public License (GPL), version 3, or at your option
+# any later version.
+
 # pylint: disable=invalid-name, too-many-lines, C0326
 
 import socket
@@ -723,9 +729,9 @@ TESTLONGPRESS             = b'\x0D'
 GET_BUMBED                = b'\x0E'
 GET_CLICK                 = b'\x0F'
 
-opUI_DRAW                 = b'\x84'
+opUI_Draw                 = b'\x84'
     # UI_DRAW_SUBCODES
-UPDATE                    = 0x00
+UPDATE                    = b'\x00'
 CLEAN                     = b'\x01'
 PIXEL                     = b'\x02'
 LINE                      = b'\x03'
