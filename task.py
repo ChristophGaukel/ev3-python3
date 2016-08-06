@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 
-# Copyright: 2016 Christoph Gaukel <christoph.gaukel@gmx.de>
+# Copyright (C) 2016 Christoph Gaukel <christoph.gaukel@gmx.de>
 
-# This software may be used and distributed according to the terms of
-# the GNU General Public License (GPL), version 3, or at your option
-# any later version.
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import typing, numbers, threading, time, datetime, sys
 
@@ -966,6 +975,13 @@ class Task:
         self._exc.fire()
         self._kwargs_cont = value
         self._root._lock.release()
+
+    @property
+    def exc_default(self):
+        """
+        default exception
+        """
+        return self._exc_default
 
 class Periodic(Task):
     """

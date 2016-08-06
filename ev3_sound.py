@@ -1,12 +1,28 @@
 #!/usr/bin/env python3
+"""
+LEGO Mindstorms EV3 - sound
+"""
 
-# Copyright: 2016 Christoph Gaukel <christoph.gaukel@gmx.de>
+# Copyright (C) 2016 Christoph Gaukel <christoph.gaukel@gmx.de>
 
-# This software may be used and distributed according to the terms of
-# the GNU General Public License (GPL), version 3, or at your option
-# any later version.
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 
-import ev3, time, datetime, sched, threading, task, numbers
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+import datetime
+import numbers
+import time
+import ev3
+import task
 
 TRIAS = {
     "tempo": 80,
@@ -16,7 +32,7 @@ TRIAS = {
         ["c'", 1],
         ["e'", 1],
         ["g'", 1],
-        ["c''",3],
+        ["c''", 3],
     ]
 }
 
@@ -99,6 +115,7 @@ class Jukebox(ev3.EV3):
         self._temperament = 440
         self._pos_color = None
         self._pos_tone = None
+        self._pos_led = None
 
     @property
     def volume(self):
@@ -107,9 +124,9 @@ class Jukebox(ev3.EV3):
         """
         return self._volume
     @volume.setter
-    def volume(self, value:int):
+    def volume(self, value: int):
         assert isinstance(value, int), "volume needs to be an integer"
-        assert 0 <= value and  value <= 100, "volume needs to be in range [0 - 100]"
+        assert value >= 0 and  value <= 100, "volume needs to be in range [0 - 100]"
         self._volume = value
 
     @property
@@ -120,7 +137,7 @@ class Jukebox(ev3.EV3):
         return self._temperament
     @temperament.setter
     def temperament(self, value: float):
-        assert isinstance(temperament, numbers.Number), "temperament needs to be a number"
+        assert isinstance(value, numbers.Number), "temperament needs to be a number"
         assert value > 0, "temperament needs to be positive"
         self._temperament = value
 
@@ -138,6 +155,7 @@ class Jukebox(ev3.EV3):
         ])
         self.send_direct_cmd(ops)
 
+    # pylint: disable=too-many-branches
     def play_tone(self, tone: str, duration: float=0) -> None:
         """
         plays a tone
@@ -150,6 +168,7 @@ class Jukebox(ev3.EV3):
         """
         assert isinstance(duration, numbers.Number), "duration needs to be a number"
         assert duration >= 0, "duration needs to be positive"
+        # pylint: disable=redefined-variable-type
         if tone == "p":
             self.stop()
             return
@@ -169,6 +188,7 @@ class Jukebox(ev3.EV3):
             freq = self._temperament * 2**(2/12)
         else:
             raise AttributeError('unknown Tone: ' + tone)
+        # pylint: enable=redefined-variable-type
 
         if len(tone) > 1:
             if tone[1] == "#":
@@ -198,6 +218,7 @@ class Jukebox(ev3.EV3):
             ev3.LCX(round(1000*duration))
         ])
         self.send_direct_cmd(ops)
+    # pylint: enable=too-many-branches
 
     def sound(self, path: str, duration: float=None, repeat: bool=False) -> task.Task:
         """
@@ -224,6 +245,7 @@ class Jukebox(ev3.EV3):
                 ev3.LCX(self._volume), # VOLUME
                 ev3.LCS(path)          # NAME
             ])
+        # pylint: disable=redefined-variable-type
         if not repeat and not duration:
             return task.Task(
                 self.send_direct_cmd,
@@ -249,11 +271,13 @@ class Jukebox(ev3.EV3):
             return task.Task(t_inner.start, join=True)
         elif repeat and duration:
             class _Task(task.Task):
+                # pylint: disable=protected-access
                 def _final(self, **kwargs):
                     super()._final(**kwargs)
                     if self._root._time_action:
                         self._root._time_rest = self._root._time_action - time.time()
                         self._root._time_action -= self._root._time_rest
+                # pylint: enable=protected-access
                 def _cont2(self, **kwargs):
                     self._time_action += self._time_rest
                     super()._cont2(**kwargs)
@@ -269,6 +293,7 @@ class Jukebox(ev3.EV3):
                 ),
                 _Task(self.stop)
             )
+        # pylint: enable=redefined-variable-type
             return task.Task(t_inner.start, join=True)
 
     def stop(self) -> None:
@@ -340,6 +365,7 @@ class Jukebox(ev3.EV3):
             task.Task(colors.stop)
         )
 
+# pylint: disable=invalid-name
 if __name__ == "__main__":
     jukebox = Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
     jukebox.verbosity = 1
@@ -358,10 +384,10 @@ if __name__ == "__main__":
     now = datetime.datetime.now().strftime('%H:%M:%S.%f')
     print(now, "*** continued ***")
     time.sleep(14)
-    jukebox.volume=12
+    jukebox.volume = 12
     now = datetime.datetime.now().strftime('%H:%M:%S.%f')
     print(now, "*** volume 12 ***")
     time.sleep(5)
-    jukebox.volume=1
+    jukebox.volume = 1
     now = datetime.datetime.now().strftime('%H:%M:%S.%f')
     print(now, "*** volume 1 ***")
