@@ -32,8 +32,6 @@ import usb.core
 
 def LCX(value: int) -> bytes:
     """create a LC0, LC1, LC2, LC4, dependent from the value"""
-    if isinstance(value, bytes) and len(value) == 1:
-        value = struct.unpack('b', value)[0]
     if   value >=    -32 and value <      0:
         return struct.pack('b', 0x3F & (value + 64))
     elif value >=      0 and value <     32:
@@ -500,7 +498,7 @@ class EV3:
           counter: 2 bytes, little endian
           type: 1 byte, SYSTEM_COMMAND_REPLY or SYSTEM_COMMAND_NO_REPLY
 
-        Keywor Arguments:
+        Keyword Arguments:
         reply: flag if with reply
 
         Returns:

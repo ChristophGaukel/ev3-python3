@@ -30,45 +30,6 @@ ACTIVITY_BUSY = 'BUSY'
 ACTIVITY_SLEEP = 'SLEEP'
 ACTIVITY_JOIN = 'JOIN'
 
-class _Sleeper:
-    """
-    interruptable sleeping
-    """
-    def __init__(self):
-        self._timer = None
-
-    def sleep(self, seconds: float, root: 'Task') -> None:
-        """
-        Delay execution for a given number of seconds.
-        seconds: may be a floating point number for subsecond precision.
-        """
-        try:
-            assert self._timer is None, 'Sleeper already sleeps'
-        except Exception as exc:
-            root._exc.put(exc)
-            root._lock.release()
-            raise
-        self._timer = threading.Timer(seconds, self._do_nothing)
-        self._timer.start()
-        root._activity = ACTIVITY_SLEEP
-        root._lock.release()
-        self._timer.join()
-        root._exc.fire()
-        root._lock.acquire()
-        root._activity = ACTIVITY_NONE
-        self._timer = None
-
-    def interrupt(self) -> None:
-        """
-        interrupt sleeping.
-        If actually not sleeping, silently does nothing.
-        """
-        if self._timer != None:
-            self._timer.cancel()
-            self._timer = None
-
-    def _do_nothing(self): pass
-
 class ExceptionHandler:
     """
     Handles Exceptions of task objects
@@ -88,11 +49,14 @@ class ExceptionHandler:
         """
         self._exc = True
 
-    def fire(self):
+    def fire(self, lock: threading.Lock=None):
         """
         fires sys.exit(1) if an exception occured, else does nothing
         """
-        if self._exc: sys.exit(1)
+        if self._exc:
+            if lock and lock.locked():
+                lock.release()
+            sys.exit(1)
 
 def concat(*tasks) -> 'Task':
     """
@@ -166,8 +130,8 @@ class Task:
         self._thread_start = None
         self._restart = False
         self._thread_cont = None
-        self._sleeper = _Sleeper()
         self._lock = threading.Lock()
+        self._cond = threading.Condition(self._lock)
         self._actual = None
         self._last = None
         self._activity = ACTIVITY_NONE
@@ -306,7 +270,10 @@ class Task:
         if time_action:
             gap = time_action - time.time()
             if gap > 0:
-                self._sleeper.sleep(gap, self._root)
+                self._activity = ACTIVITY_SLEEP
+                self._cond.wait(gap)
+                self._activity = ACTIVITY_NONE
+                self._exc.fire(self._lock)
                 if not threading.current_thread() is self._thread_start:
                     self._lock.release()
                     return
@@ -372,7 +339,7 @@ class Task:
         if self._time_called_stop is None:
             self._time_called_stop = time.time()
         if self._activity is ACTIVITY_SLEEP:
-            self._sleeper.interrupt()
+            self._cond.notify()
         not_stopped = []
         for task in self._contained:
             if not task in self._contained_register or \
@@ -452,7 +419,10 @@ class Task:
         if time_cont:
             gap = time_cont - time.time()
             if gap > 0:
-                self._sleeper.sleep(gap, self)
+                self._activity = ACTIVITY_SLEEP
+                self._cond.wait(gap)
+                self._activity = ACTIVITY_NONE
+                self._exc.fire(self._lock)
                 if not threading.current_thread() is self._thread_cont:
                     self._lock.release()
                     return
@@ -516,7 +486,10 @@ class Task:
             if self._time_action:
                 gap = self._time_action - time.time()
                 if gap > 0:
-                    self._sleeper.sleep(gap, self)
+                    self._activity = ACTIVITY_SLEEP
+                    self._cond.wait(gap)
+                    self._activity = ACTIVITY_NONE
+                    self._exc.fire(self._lock)
                     if self._state != STATE_STARTED:
                         self._final()
                         return
@@ -525,7 +498,10 @@ class Task:
             if self._time_end:
                 gap = self._time_end  - time.time()
                 if gap > 0:
-                    self._sleeper.sleep(gap, self)
+                    self._activity = ACTIVITY_SLEEP
+                    self._cond.wait(gap)
+                    self._activity = ACTIVITY_NONE
+                    self._exc.fire(self._lock)
                     if self._state != STATE_STARTED:
                         self._final()
                         return
@@ -559,12 +535,18 @@ class Task:
                 if self._root._state != STATE_STARTED:
                     self._final(outstand=True)
                     return
-                self._root._sleeper.sleep(real_gap, self._root)
+                self._root._activity = ACTIVITY_SLEEP
+                self._root._cond.wait(real_gap)
+                self._root._activity = ACTIVITY_NONE
+                self._root._exc.fire(self._root._lock)
         if self._time_end:
             self._root._time_action = self._time_end
             gap = self._root._time_action - time.time()
             if self._root._state == STATE_STARTED and gap > 0:
-                self._root._sleeper.sleep(gap, self._root)
+                self._root._activity = ACTIVITY_SLEEP
+                self._root._cond.wait(gap)
+                self._root._activity = ACTIVITY_NONE
+                self._root._exc.fire(self._root._lock)
             if self._root._state == STATE_STARTED:
                 self._time_end = None
             elif not self is self._root:

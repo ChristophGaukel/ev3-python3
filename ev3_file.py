@@ -29,7 +29,7 @@ class FileSystem(ev3.EV3):
     """
     def write_file(self, path: str, data: bytes) -> None:
         """
-        Write a file to the EV3's file system
+        Write data into a file of the EV3's file system
 
         Attributes:
         path: absolute or relative path (from "/home/root/lms2012/sys/") of the file
