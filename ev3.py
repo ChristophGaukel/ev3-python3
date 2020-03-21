@@ -357,8 +357,9 @@ class EV3:
         if not self._device:
             raise RuntimeError("Lego EV3 not found")
         # pylint: disable=no-member
-        if self._device.is_kernel_driver_active(0) is True:
-            self._device.detach_kernel_driver(0)
+        for i in self._device.configurations()[0].interfaces():
+            if self._device.is_kernel_driver_active(i.index) is True:
+                self._device.detach_kernel_driver(i.index)
         self._device.set_configuration()
 
         # initial read
