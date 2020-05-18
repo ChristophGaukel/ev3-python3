@@ -369,25 +369,25 @@ Classes
 EV3
 ~~~~
 
-.. autoclass:: EV3
+.. autoclass:: ev3_dc.EV3
    :members:
 
 Jukebox
 ~~~~~~~
 
-.. autoclass:: Jukebox
+.. autoclass:: ev3_dc.Jukebox
    :members:
 
 TwoWheelVehicle
 ~~~~~~~~~~~~~~~
 
-.. autoclass:: TwoWheelVehicle
+.. autoclass:: ev3_dc.TwoWheelVehicle
    :members:
 
 PID
 ~~~
 
-.. autoclass:: PID
+.. autoclass:: ev3_dc.PID
    :members:
 
 Index
