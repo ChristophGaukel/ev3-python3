@@ -7,11 +7,8 @@ from datetime import datetime
 from numbers import Number
 from time import time, sleep
 from thread_task import Task, Repeated, Periodic, Sleep, concat
-from ev3_dc import (
-    EV3,
+from .constants import (
     BLUETOOTH,
-    LCX,
-    LCS,
     opUI_Write,
     opSound,
     TONE,
@@ -24,6 +21,11 @@ from ev3_dc import (
     LED_RED_FLASH,
     LED_GREEN
 )
+from .functions import (
+    LCX,
+    LCS
+)
+from .ev3 import EV3
 
 TRIAS = {
     "tempo": 80,

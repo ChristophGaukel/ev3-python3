@@ -12,7 +12,7 @@ commands which come from outside.
 Installation
 ------------
 
-.. code-block:: none
+::
 
   python3 -m pip install --user ev3_dc
              
@@ -22,12 +22,11 @@ Examples
 Writing and sending direct commands
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This program communicates via USB with
-an EV3 device (mac-address: '00:16:53:42:2B:99')
-and plays a tone with a frequency of 440 Hz
-for a duration of 1 sec.
+This program communicates via USB with an EV3 device (mac-address:
+'00:16:53:42:2B:99', replace it by the the mac-address of your EV3)
+and plays a tone with a frequency of 440 Hz for a duration of 1 sec.
 
-.. code:: python3
+::
 
   #!/usr/bin/env python3
   
@@ -44,9 +43,7 @@ for a duration of 1 sec.
   ))
   my_ev3.send_direct_cmd(ops)
 
-The output shows the direct command, which was sent to the EV3 device:
-
-.. code-block:: none
+The output shows the direct command, which was sent to the EV3 device::
 
   11:48:31.188008 Sent 0x|0E:00|2A:00|80|00:00|94:01:01:82:B8:01:82:E8:03|
 
@@ -56,7 +53,7 @@ Subclasses of EV3 with comfortable APIs
 Class **Jukebox**  has a method **play_tone**,
 which also plays tones:
 
-.. code:: python3
+::
 
   #!/usr/bin/env python3
 
@@ -68,8 +65,10 @@ which also plays tones:
 
 This program does the very same thing via bluetooth! Before you can
 run it, you need to pair the the two devices (the computer, that
-executes the program and the EV3 brick). The output:
-
-.. codeblock:: none
+executes the program and the EV3 brick). The output::
 
   11:55:11.324701 Sent 0x|0E:00|2A:00|80|00:00|94:01:01:82:B8:01:82:E8:03|
+
+Read
+`ev3_dc.readthedocs.io <https://ev3_dc.readthedocs.io/en/latest/>`_
+for more details.

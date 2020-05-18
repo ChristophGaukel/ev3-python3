@@ -6,14 +6,12 @@ LEGO Mindstorms EV3 direct commands - vehicle
 from math import pi, cos, sin, atan, radians, copysign, degrees, sqrt
 from struct import unpack
 from time import time
-from numbers import Number
+from numbers import Number, Integral
 from thread_task import Task, Repeated
-from ev3_dc import (
-    EV3,
+from ev3_dc.ev3 import EV3
+from .constants import (
     BLUETOOTH,
     WIFI,
-    LCX,
-    GVX,
     opInput_Device,
     opOutput_Step_Sync,
     opOutput_Start,
@@ -23,7 +21,11 @@ from ev3_dc import (
     PORT_C,
     PORT_D,
     READY_RAW,
-    SYNC,
+    SYNC
+)
+from .functions import (
+    LCX,
+    GVX,
     port_motor_input
 )
 
@@ -151,7 +153,8 @@ class TwoWheelVehicle(EV3):
         """
         def stop(self):
             super().stop()
-            self._time_action = time()
+            if self._current is not None:
+                self._current._gap = None
 
     def _reaction(self):
         """of connection protocol"""
@@ -312,7 +315,12 @@ class TwoWheelVehicle(EV3):
                 wait = delta_t_new
         return wait
 
-    def _move(self, speed: int, turn: int) -> None:
+    def move_task(
+        self,
+        speed: Integral,
+        turn: Integral,
+        duration: Number = None
+    ) -> Task:
         """
         Start unlimited movement of the vehicle
 
@@ -320,28 +328,88 @@ class TwoWheelVehicle(EV3):
           speed
             speed in percent [-100 - 100]
               > 0: forward
+
               < 0: backward
           turn
             type of turn [-200 - 200]
               -200: circle right on place
+
               -100: turn right with unmoved right wheel
+
                0  : straight
+
               100: turn left with unmoved left wheel
+
               200: circle left on place
+
+        Keyword Arguments
+          duration
+            duration of movement [s]
+
+        Returns
+          Task, which needs to be started or combined with other tasks
         """
-        assert self._sync_mode != SYNC, \
+        assert duration is not None or self._sync_mode != SYNC, \
             'no unlimited operations allowed in sync_mode SYNC'
-        assert isinstance(speed, int), "speed needs to be an integer value"
+        assert isinstance(speed, Integral), \
+            "speed needs to be an integer value"
         assert -100 <= speed and speed <= 100, \
             "speed needs to be in range [-100 - 100]"
-        assert isinstance(turn, int), "turn needs to be an integer value"
+        assert isinstance(turn, Integral), \
+            "turn needs to be an integer value"
         assert -200 <= turn and turn <= 200, \
             "turn needs to be in range [-200 - 200]"
+        assert duration is None or isinstance(duration, Number), \
+            "duration needs to be a positive number"
+        assert duration is None or duration > 0, \
+            "duration needs to be a positive number"
+
+        if duration is None:
+            return Task(
+                self.move(speed, turn)
+            )
+        else:
+            return Task(
+                self.move(speed, turn),
+                duration=duration
+            )
+
+    def move(self, speed: int, turn: int) -> None:
+        """
+        Start unlimited movement of the vehicle
+
+        Positional Arguments
+          speed
+            speed in percent [-100 - 100]
+              > 0: forward
+
+              < 0: backward
+          turn
+            type of turn [-200 - 200]
+              -200: circle right on place
+
+              -100: turn right with unmoved right wheel
+
+               0  : straight
+
+              100: turn left with unmoved left wheel
+
+              200: circle left on place
+        """
+        assert isinstance(speed, Integral), \
+            "speed needs to be an integer value"
+        assert -100 <= speed and speed <= 100, \
+            "speed needs to be in range [-100 - 100]"
+        assert isinstance(turn, Integral), \
+            "turn needs to be an integer value"
+        assert -200 <= turn and turn <= 200, \
+            "turn needs to be in range [-200 - 200]"
+
         if self._polarity is -1:
             speed *= -1
         if self._port_left < self._port_right:
             turn *= -1
-        ops = b''.join([
+        ops = b''.join((
             opOutput_Step_Sync,
             LCX(0),  # LAYER
             LCX(self._port_left + self._port_right),  # NOS
@@ -352,9 +420,15 @@ class TwoWheelVehicle(EV3):
             opOutput_Start,
             LCX(0),  # LAYER
             LCX(self._port_left + self._port_right)  # NOS
-        ])
-        reply = self.send_direct_cmd(ops + self._ops_pos(), global_mem=8)
-        pos = unpack('<ii', reply[5:])
+        ))
+        pos = unpack(
+            '<ii',
+            self.send_direct_cmd(
+                ops + self._ops_pos(),
+                global_mem=8,
+                sync_mode=SYNC
+            )[5:]
+        )
         if self._port_left < self._port_right:
             turn *= -1
         self._update(pos)
@@ -362,27 +436,43 @@ class TwoWheelVehicle(EV3):
         self._speed = speed
         self._moves = True
 
-    def stop(
+    def stop_task(
         self,
-        brake: bool = False
+        brake: bool = False,
+        duration: Number = None
     ) -> Task:
         """
         Stop any movement of the vehicle
 
-        Optional Arguments
+        Keyword Arguments
           brake
             flag if activating brake
+          duration
+            duration of movement [s]
 
         Returns
-          task object, which needs to be started or combined with other tasks
+          Task, which needs to be started or combined with other tasks
         """
-        assert isinstance(brake, bool), "brake needs to be a boolean value"
-        return Task(
-            self._stop,
-            args=(brake,)
-        )
+        assert isinstance(brake, bool), \
+            "brake needs to be a boolean value"
+        assert duration is None or duration > 0, \
+            "duration needs to be a positive number"
+        assert duration is None or isinstance(duration, Number), \
+            "duration needs to be a number"
 
-    def _stop(self, brake: bool) -> None:
+        if duration is None:
+            return Task(
+                self._stop,
+                args=(brake,)
+            )
+        else:
+            return Task(
+                self._stop,
+                args=(brake,),
+                duration=duration
+            )
+
+    def stop(self, brake: bool) -> None:
         """
         Stop movement of the vehicle
 
@@ -390,18 +480,24 @@ class TwoWheelVehicle(EV3):
           brake
             flag if activating brake
         """
-        if brake:
-            brake_int = 1
-        else:
-            brake_int = 0
-        ops = b''.join([
+        assert isinstance(brake, bool), \
+            "brake needs to be a boolean value"
+
+        brake_int = 1 if brake else 0
+        ops = b''.join((
             opOutput_Stop,
             LCX(0),  # LAYER
             LCX(self._port_left + self._port_right),  # NOS
             LCX(brake_int)  # BRAKE
-        ])
-        reply = self.send_direct_cmd(ops + self._ops_pos(), global_mem=8)
-        pos = unpack('<ii', reply[5:])
+        ))
+        pos = unpack(
+            '<ii',
+            self.send_direct_cmd(
+                ops + self._ops_pos(),
+                global_mem=8,
+                sync_mode=SYNC
+            )[5:]
+        )
         self._update(pos)
         self._moves = False
 
@@ -428,7 +524,7 @@ class TwoWheelVehicle(EV3):
               if set, returns, when movement is finished, but does not stop
 
         Returns
-          task object, which needs to be started or combined with other tasks
+          Task, which needs to be started or combined with other tasks
         """
         assert isinstance(speed, int), \
             "speed needs to be an interger"
@@ -456,10 +552,10 @@ class TwoWheelVehicle(EV3):
 
     def _drive_straight(self, speed: int, distance: float) -> None:
         """starts straight movement and sets test arguments"""
-        self._move(speed, 0)
+        self.move(speed, 0)
         if distance is not None:
-            step = round(distance * 360 / (2 * pi * self._radius_wheel))
             direction = copysign(1, speed * self._polarity)
+            step = round(distance * 360 / (2 * pi * self._radius_wheel))
             final_pos = [
                 self._pos[0] + direction * step,
                 self._pos[1] + direction * step
@@ -495,7 +591,7 @@ class TwoWheelVehicle(EV3):
             flag of turn right (only in case of radius_turn == 0)
 
         Returns
-          task object, which needs to be started or combined with other tasks
+          Task, which needs to be started or combined with other tasks
         """
         assert isinstance(radius_turn, Number), \
             "radius_turn needs to be a number"
@@ -538,7 +634,7 @@ class TwoWheelVehicle(EV3):
         if turn == 0:
             raise ValueError("radius_turn is too large")
         print(radius_turn, right_turn, speed, turn)
-        self._move(speed, turn)
+        self.move(speed, turn)
         if angle is not None:
             step_outer = (
                 self._polarity * angle * rad_right / self._radius_wheel
@@ -576,7 +672,7 @@ class TwoWheelVehicle(EV3):
               negative: clockwise
 
         Returns
-          task object, which needs to be started or combined with other tasks
+          Task, which needs to be started or combined with other tasks
         """
         assert isinstance(speed, int), "speed needs to be an integer value"
         assert -100 <= speed and speed <= 100, \
@@ -704,6 +800,11 @@ class TwoWheelVehicle(EV3):
 
     def _vehicle_cont(self):
         """continue the stopped movement"""
-        self._move(self._speed, self._turn)
+        self.move(self._speed, self._turn)
         self._to_stop = False
         self._last_t = None
+
+
+__all__ = [
+    TwoWheelVehicle
+]

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-'''LEGO EV3 direct commands'''
+'''
+LEGO EV3 direct commands - ev3
+'''
 
 import re
 import usb.util
@@ -10,33 +12,24 @@ from datetime import datetime
 from threading import Lock
 from numbers import Integral
 from .exceptions import DirCmdError, SysCmdError
-
-
-_ID_VENDOR_LEGO = 0x0694  # Usb-Identification of the device
-_ID_PRODUCT_EV3 = 0x0005
-
-_EP_IN = 0x81  # Usb-Endpoints
-_EP_OUT = 0x01
-
-_DIRECT_COMMAND_REPLY = b'\x00'
-_DIRECT_COMMAND_NO_REPLY = b'\x80'
-
-_DIRECT_REPLY = b'\x02'
-_DIRECT_REPLY_ERROR = b'\x04'
-
-_SYSTEM_COMMAND_REPLY = b'\x01'
-_SYSTEM_COMMAND_NO_REPLY = b'\x81'
-
-_SYSTEM_REPLY = b'\x03'
-_SYSTEM_REPLY_ERROR = b'\x05'
-
-WIFI = 'Wifi'
-BLUETOOTH = 'Bluetooth'
-USB = 'Usb'
-
-STD = 'STD'  # reply if global_mem, wait for reply
-ASYNC = 'ASYNC'  # reply if global_mem, never wait for reply
-SYNC = 'SYNC'  # always with reply, always wait for reply
+from .constants import (
+    _ID_VENDOR_LEGO,
+    _ID_PRODUCT_EV3,
+    _EP_IN,
+    _EP_OUT,
+    _DIRECT_COMMAND_REPLY,
+    _DIRECT_COMMAND_NO_REPLY,
+    _DIRECT_REPLY,
+    _SYSTEM_COMMAND_REPLY,
+    _SYSTEM_COMMAND_NO_REPLY,
+    _SYSTEM_REPLY,
+    WIFI,
+    BLUETOOTH,
+    USB,
+    STD,
+    ASYNC,
+    SYNC
+)
 
 
 class PhysicalEV3:
@@ -125,10 +118,10 @@ class PhysicalEV3:
         # pick serial number, port, name and protocol
         # from the broadcast message
         matcher = re.search(
-            r'Serial-Number: (\w*)\s\n' +
+            r'^Serial-Number: (\w*)\s\n' +
             r'Port: (\d{4,4})\s\n' +
             r'Name: (\w+)\s\n' +
-            r'Protocol: (\w+)\s\n' +
+            r'Protocol: (\w+)$',
             data.decode('utf-8')
         )
         serial_number = matcher.group(1)
@@ -208,7 +201,7 @@ class EV3:
             self,
             protocol: str=None,
             host: str=None,
-            ev3_obj=None,
+            ev3_obj: 'EV3'=None,
             sync_mode=STD,
             verbosity=0
     ):
@@ -219,7 +212,7 @@ class EV3:
           protocol
             None, 'Bluetooth', 'Usb' or 'Wifi'
           host
-            None or mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
+            MAC-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
           ev3_obj
             None or an existing EV3 object (its connections will be used)
           sync mode (standard, asynchronous, synchronous)
@@ -260,20 +253,28 @@ class EV3:
         """
         sync mode (standard, asynchronous, synchronous)
 
-        STD:   Use DIRECT_COMMAND_REPLY if global_mem > 0,
-               wait for reply if there is one.
-        ASYNC: Use DIRECT_COMMAND_REPLY if global_mem > 0,
-               never wait for reply (it's the task of the calling program).
-        SYNC:  Always use DIRECT_COMMAND_REPLY and wait for reply.
+        STD
+          use DIRECT_COMMAND_REPLY if global_mem > 0,
+          wait for reply if there is one.
+        ASYNC
+          use DIRECT_COMMAND_REPLY if global_mem > 0,
+          never wait for reply (it's the task of the calling program).
+        SYNC
+          always use DIRECT_COMMAND_REPLY and wait for reply.
 
         The idea is:
-        ASYNC: Interruption or EV3 device queues direct commands,
-               control directly comes back.
-        SYNC:  EV3 device is blocked until direct command is finished,
-               control comes back, when direct command is finished.
-        STD:   NO_REPLY like ASYNC with interruption or EV3 queuing,
-               REPLY like SYNC, synchronicity of program and EV3 device.
+          ASYNC
+            Interruption or EV3 device queues direct commands,
+            control directly comes back.
+          SYNC
+            EV3 device is blocked until direct command is finished,
+            control comes back, when direct command is finished.
+          STD
+            NO_REPLY like ASYNC with interruption or EV3 queuing,
+
+            REPLY like SYNC, synchronicity of program and EV3 device.
         """
+
         return self._sync_mode
 
     @sync_mode.setter
@@ -312,10 +313,13 @@ class EV3:
 
         Positional Arguments
           ops
-            holds netto data only (operations), the following fields are added:
+            holds netto data only (operations), these fields are added:
               length: 2 bytes, little endian
+
               msg_cnt: 2 bytes, little endian
+
               type: 1 byte, DIRECT_COMMAND_REPLY or DIRECT_COMMAND_NO_REPLY
+
               header: 2 bytes, holds sizes of local and global memory
 
         Keyword Arguments
@@ -508,10 +512,11 @@ class EV3:
 
         Positional Arguments
           cmd
-            holds netto data only (cmd and arguments),
-            the following fields are added:
+            holds netto data only (cmd and arguments), these fields are added:
               length: 2 bytes, little endian
+
               msg_cnt: 2 bytes, little endian
+
               type: 1 byte, SYSTEM_COMMAND_REPLY or SYSTEM_COMMAND_NO_REPLY
 
         Keyword Arguments
@@ -521,7 +526,6 @@ class EV3:
         Returns
           reply (in case of SYSTEM_COMMAND_NO_REPLY: msg_cnt)
         """
-
         self._physical_ev3._lock.acquire()
 
         if reply:
