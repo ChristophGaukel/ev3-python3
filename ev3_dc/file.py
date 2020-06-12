@@ -4,11 +4,13 @@ LEGO Mindstorms EV3 direct commands - filesystem
 """
 
 import struct
-from ev3_dc import (
-    EV3,
+from ev3_dc import EV3
+from .functions import (
     LCS,
     LCX,
-    GVX,
+    GVX
+)
+from .constants import (
     opFile,
     MOVE,
     BEGIN_DOWNLOAD,
@@ -23,9 +25,9 @@ from ev3_dc import (
     GET_FOLDERS,
     GET_SUBFOLDER_NAME,
     DEL_SUBFOLDER,
-    SysCmdError,
-    DirCmdError
+    SYNC
 )
+from .exceptions import SysCmdError, DirCmdError
 
 
 class FileSystem(EV3):
@@ -51,7 +53,7 @@ class FileSystem(EV3):
             str.encode(path) + b'\x00'    # NAME
         ])
         reply = self.send_system_cmd(cmd)
-        handle = struct.unpack('B', reply[7:8])[0]
+        handle = struct.unpack('B', reply[1])[0]
         rest = size
         while rest > 0:
             part_size = min(1017, rest)
@@ -82,11 +84,17 @@ class FileSystem(EV3):
             str.encode(path) + b'\x00'    # NAME
         ])
         reply = self.send_system_cmd(cmd)
-        (size, handle) = struct.unpack('<IB', reply[7:12])
+        size, handle = struct.unpack(
+            '<IB',
+            reply[1:6]
+        )
         part_size = min(1012, size)
         if part_size > 0:
             fmt = str(part_size) + 's'
-            data = struct.unpack(fmt, reply[12:])[0]
+            data = struct.unpack(
+                fmt,
+                reply[6:]
+            )[0]
         else:
             data = b''
         rest = size - part_size
@@ -96,12 +104,13 @@ class FileSystem(EV3):
                 CONTINUE_UPLOAD,
                 struct.pack('<BH', handle, part_size)  # HANDLE, SIZE
             ])
-            reply = self.send_system_cmd(cmd)
-            fmt = 'B' + str(part_size) + 's'
-            (handle, part) = struct.unpack(fmt, reply[7:])
+            handle, part = struct.unpack(
+                'B' + str(part_size) + 's',
+                self.send_system_cmd(cmd)[1:]
+            )
             data += part
             rest -= part_size
-            if rest <= 0 and reply[6:7] != SYSTEM_END_OF_FILE:
+            if rest <= 0 and reply[0] != SYSTEM_END_OF_FILE:
                 raise SysCmdError("end of file not reached")
         return data
 
@@ -139,26 +148,25 @@ class FileSystem(EV3):
             LCS(path_source),  # SOURCE
             LCS(path_dest)  # DESTINATION
         ])
-        self.send_direct_cmd(ops, global_mem=1)
+        self.send_direct_cmd(
+            ops,
+            global_mem=1,
+            sync_mode=SYNC
+        )
 
     def list_dir(self, path: str) -> dict:
         """
         Read one of EV3's directories
 
-        Positional Arguments:
+        Positional Arguments
           path:
             absolute or relative path to the directory (f.i. "/bin")
 
-        Returns:
-          dict, that holds subfolders and files:
-            folders as an array of strings (names)
-            files as an array of dictionaries
-            {
-              'folders': ['subfolder1', 'subfolder2', ...]
-              'files': [{'size': 4202,
-                      'name': 'usb-devices',
-                      'md5': '5E78E1B8C0E1E8CB73FDED5DE384C000'}, ...]
-            }
+        Returns
+          subfolders
+            tuple of strings (names)
+          files
+            tuple of tuples (name:str, size:int, md5:str)
         """
         cmd = b''.join([
             LIST_FILES,
@@ -166,11 +174,11 @@ class FileSystem(EV3):
             str.encode(path) + b'\x00'  # NAME
         ])
         reply = self.send_system_cmd(cmd)
-        (size, handle) = struct.unpack('<IB', reply[7:12])
+        size, handle = struct.unpack('<IB', reply[1:6])
         part_size = min(1012, size)
         if part_size > 0:
             fmt = str(part_size) + 's'
-            data = struct.unpack(fmt, reply[12:])[0]
+            data = struct.unpack(fmt, reply[6:])[0]
         else:
             data = b''
         rest = size - part_size
@@ -180,13 +188,14 @@ class FileSystem(EV3):
                 CONTINUE_LIST_FILES,
                 struct.pack('<BH', handle, part_size)  # HANDLE, SIZE
             ])
-            reply = self.send_system_cmd(cmd)
-            fmt = 'B' + str(part_size) + 's'
-            (handle, part) = struct.unpack(fmt, reply[7:])
+            handle, part = struct.unpack(
+                'B' + str(part_size) + 's',
+                self.send_system_cmd(cmd)[1:]
+            )
             data += part
             rest -= part_size
             if rest <= 0 and reply[6:7] != SYSTEM_END_OF_FILE:
-                raise SysCmdError("end of file not reached")
+                raise SysCmdError("did not reach end of file")
         folders = []
         files = []
         for line in data.split(sep=b'\x0A'):
@@ -197,12 +206,12 @@ class FileSystem(EV3):
             else:
                 (md5, size_hex, name) = line.split(None, 2)
                 size = int(size_hex, 16)
-                files.append({
-                    'md5': md5.decode("utf8"),
-                    'size': size,
-                    'name': name.decode("utf8")
-                })
-        return {'files': files, 'folders': folders}
+                files.append(
+                    name.decode("utf8"),
+                    size,
+                    md5.decode("utf8")
+                )
+        return tuple(folders), tuple(files)
 
     def create_dir(self, path: str) -> None:
         """
@@ -243,8 +252,14 @@ class FileSystem(EV3):
                 LCS(parent_path),
                 GVX(0)
             ])
-            reply = self.send_direct_cmd(ops, global_mem=1)
-            num = struct.unpack('B', reply[5:])[0]
+            num = struct.unpack(
+                'B',
+                self.send_direct_cmd(
+                    ops,
+                    global_mem=1,
+                    sync_mode=SYNC
+                )
+            )[0]
             found = False
             for i in range(num):
                 ops = b''.join([
@@ -255,10 +270,14 @@ class FileSystem(EV3):
                     LCX(64),  # LENGTH
                     GVX(0)  # NAME
                 ])
-                reply = self.send_direct_cmd(ops, global_mem=64)
-                subdir = struct.unpack('64s', reply[5:])[0]
-                subdir = subdir.split(b'\x00')[0]
-                subdir = subdir.decode("utf8")
+                subdir = struct.unpack(
+                    '64s',
+                    self.send_direct_cmd(
+                        ops,
+                        global_mem=64,
+                        sync_mode=SYNC
+                    )
+                )[0].split(b'\x00')[0].decode("utf8")
                 if subdir == folder:
                     found = True
                     ops = b''.join([
@@ -267,7 +286,10 @@ class FileSystem(EV3):
                         LCS(parent_path),  # NAME
                         LCX(i + 1)  # ITEM
                     ])
-                    self.send_direct_cmd(ops)
+                    self.send_direct_cmd(
+                        ops,
+                        sync_mode=SYNC
+                    )
                     break
             if not found:
                 raise DirCmdError("Folder " + path + " doesn't exist")

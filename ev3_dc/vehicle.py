@@ -8,7 +8,7 @@ from struct import unpack
 from time import time
 from numbers import Number, Integral
 from thread_task import Task, Repeated
-from ev3_dc.ev3 import EV3
+from .ev3 import EV3
 from .constants import (
     BLUETOOTH,
     WIFI,
@@ -244,8 +244,14 @@ class TwoWheelVehicle(EV3):
             wait = 0.1
         else:
             first_call = False
-            reply = self.send_direct_cmd(self._ops_pos(), global_mem=8)
-            pos = unpack('<ii', reply[5:])
+            pos = unpack(
+                '<ii',
+                self.send_direct_cmd(
+                    self._ops_pos(),
+                    global_mem=8,
+                    sync_mode=SYNC
+                )
+            )
             self._update(pos)
             if direction > 0 and self._orientation >= final_o or \
                direction < 0 and self._orientation <= final_o:
@@ -288,8 +294,14 @@ class TwoWheelVehicle(EV3):
             wait = 0.1
         else:
             first_call = False
-            reply = self.send_direct_cmd(self._ops_pos(), global_mem=8)
-            pos = unpack('<ii', reply[5:])
+            pos = unpack(
+                '<ii',
+                self.send_direct_cmd(
+                    self._ops_pos(),
+                    global_mem=8,
+                    sync_mode=SYNC
+                )
+            )
             self._update(pos)
             if direction > 0 and self._pos[0] >= final_pos[0] or \
                direction < 0 and self._pos[0] <= final_pos[0]:
@@ -427,7 +439,7 @@ class TwoWheelVehicle(EV3):
                 ops + self._ops_pos(),
                 global_mem=8,
                 sync_mode=SYNC
-            )[5:]
+            )
         )
         if self._port_left < self._port_right:
             turn *= -1
@@ -496,7 +508,7 @@ class TwoWheelVehicle(EV3):
                 ops + self._ops_pos(),
                 global_mem=8,
                 sync_mode=SYNC
-            )[5:]
+            )
         )
         self._update(pos)
         self._moves = False

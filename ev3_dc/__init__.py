@@ -14,5 +14,13 @@ from .functions import (
 from .constants import *
 from .ev3 import EV3
 from .vehicle import TwoWheelVehicle
-from .sound import TRIAS, ALLE_MEINE_ENTCHEN, HAPPY_BIRTHDAY, Jukebox
+from .sound import (
+    Jukebox,
+    TRIAD,
+    ALLE_MEINE_ENTCHEN,
+    HAPPY_BIRTHDAY,
+    EU_ANTEMN,
+    FRERE_JACQUES
+)
+from .file import FileSystem
 from .exceptions import DirCmdError, SysCmdError

@@ -65,7 +65,10 @@ class PhysicalEV3:
         """
         closes the connection to the LEGO EV3
         """
-        if isinstance(self._socket, socket.socket):
+        if (
+            self._socket is not None and
+            isinstance(self._socket, socket.socket)
+        ):
             self._socket.close()
 
     def next_msg_cnt(self) -> int:
@@ -198,27 +201,27 @@ class EV3:
     """
 
     def __init__(
-            self,
-            protocol: str=None,
-            host: str=None,
-            ev3_obj: 'EV3'=None,
-            sync_mode=STD,
-            verbosity=0
+        self,
+        protocol: str = None,
+        host: str = None,
+        ev3_obj: 'EV3' = None,
+        sync_mode: str = None,
+        verbosity=0
     ):
         """
         Establish a connection to a LEGO EV3 device
 
         Keyword Arguments (either protocol and host or ev3_obj):
           protocol
-            None, 'Bluetooth', 'Usb' or 'Wifi'
+            'Bluetooth', 'Usb' or 'Wifi'
           host
             MAC-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
           ev3_obj
-            None or an existing EV3 object (its connections will be used)
+            existing EV3 object (its connections will be used)
           sync mode (standard, asynchronous, synchronous)
             STD
               Use DIRECT_COMMAND_REPLY if global_mem > 0,
-              wait for reply if there is one.
+              then wait for reply.
             ASYNC
               Use DIRECT_COMMAND_REPLY if global_mem > 0,
               never wait for reply (it's the task of the calling program).
@@ -242,11 +245,15 @@ class EV3:
             "allowed verbosity values are: 0, 1 or 2"
         self._verbosity = int(verbosity)
 
-        assert isinstance(sync_mode, str), \
+        assert sync_mode is None or isinstance(sync_mode, str), \
             "sync_mode needs to be of type str"
-        assert sync_mode in (STD, SYNC, ASYNC), \
+        assert sync_mode is None or sync_mode in (STD, SYNC, ASYNC), \
             "value of sync_mode: " + sync_mode + " is invalid"
-        self._sync_mode = sync_mode
+
+        if sync_mode is None and self._physical_ev3._protocol == USB:
+            self._sync_mode = SYNC
+        else:
+            self._sync_mode = STD
 
     @property
     def sync_mode(self) -> str:
@@ -301,12 +308,12 @@ class EV3:
         self._verbosity = int(value)
 
     def send_direct_cmd(
-            self,
-            ops: bytes,
-            local_mem: Integral = 0,
-            global_mem: Integral = 0,
-            sync_mode: str = None,
-            verbosity: Integral = None
+        self,
+        ops: bytes,
+        local_mem: Integral = 0,
+        global_mem: Integral = 0,
+        sync_mode: str = None,
+        verbosity: Integral = None
     ) -> bytes:
         """
         Send a direct command to the LEGO EV3
@@ -355,7 +362,7 @@ class EV3:
         assert global_mem >= 0, \
             "global_mem needs to be positive"
         assert local_mem <= 1019, \
-            "global_memm has a maximum of 1019"
+            "global_mem has a maximum of 1019"
         assert sync_mode is None or isinstance(sync_mode, str), \
             "sync_mode needs to be of type str"
         assert sync_mode is None or sync_mode in (STD, SYNC, ASYNC), \
@@ -413,13 +420,17 @@ class EV3:
             self._physical_ev3._lock.release()
             return msg_cnt
         else:
-            self._physical_ev3._lock.release()
-            return self.wait_for_reply(msg_cnt, verbosity=verbosity)
+            return self.wait_for_reply(
+                msg_cnt,
+                verbosity=verbosity,
+                _locked=True
+            )
 
     def wait_for_reply(
-            self,
-            msg_cnt: bytes,
-            verbosity: Integral = None
+        self,
+        msg_cnt: bytes,
+        verbosity: Integral = None,
+        _locked: bool = False
     ) -> bytes:
         """
         Ask the LEGO EV3 for a reply and wait until it is received
@@ -433,7 +444,7 @@ class EV3:
             level (0, 1, 2) of verbosity (prints on stdout).
 
         Returns
-          reply to the direct command
+          reply to the direct command (without len, msg_cnt and return status)
         """
         assert isinstance(msg_cnt, bytes), \
             "msg_cnt needs to be of type bytes"
@@ -444,20 +455,21 @@ class EV3:
         assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
 
-        self._physical_ev3._lock.acquire()
+        if not _locked:
+            self._physical_ev3._reply_lock.acquire()
 
         # reply already in buffer?
         reply = self._physical_ev3._reply_buffer.pop(msg_cnt, None)
         if reply is not None:
             self._physical_ev3._lock.release()
-            if reply[4:5] != _DIRECT_REPLY:
-                raise DirCmdError(
-                    "direct command {:02X}:{:02X} replied error".format(
-                        reply[2],
-                        reply[3]
-                    )
+            if reply[4:5] == _DIRECT_REPLY:
+                return reply
+            raise DirCmdError(
+                "direct command {:02X}:{:02X} replied error".format(
+                    reply[2],
+                    reply[3]
                 )
-            return reply
+            )
 
         #  get replies from EV3 device until msg_cnt fits
         while True:
@@ -490,23 +502,28 @@ class EV3:
                     print()
 
             if msg_cnt != msg_cnt_reply:
-                # does not fit, reply into buffer
+                # does not fit, put reply into buffer
                 self._physical_ev3.put_to_reply_buffer(
                     msg_cnt_reply,
                     reply[:len_data]
                 )
             else:
                 self._physical_ev3._lock.release()
-                if reply[4:5] != _DIRECT_REPLY:
-                    raise DirCmdError(
-                        "direct command {:02X}:{:02X} replied error".format(
-                            reply[2],
-                            reply[3]
-                        )
+                if reply[4:5] == _DIRECT_REPLY:
+                    return reply[5:len_data]
+                raise DirCmdError(
+                    "direct command {:02X}:{:02X} replied error".format(
+                        reply[2],
+                        reply[3]
                     )
-                return reply[:len_data]
+                )
 
-    def send_system_cmd(self, cmd: bytes, reply: bool=True) -> bytes:
+    def send_system_cmd(
+        self,
+        cmd: bytes,
+        reply: bool = True,
+        verbosity: Integral = None
+    ) -> bytes:
         """
         Send a system command to the LEGO EV3
 
@@ -522,10 +539,21 @@ class EV3:
         Keyword Arguments
           reply
             flag if with reply
+          verbosity
+            level (0, 1, 2) of verbosity (prints on stdout).
 
         Returns
           reply (in case of SYSTEM_COMMAND_NO_REPLY: msg_cnt)
         """
+        assert isinstance(cmd, bytes), \
+            "cmd needs to be of type bytes"
+        assert isinstance(reply, bool), \
+            "reply needs to be of type bool"
+        assert verbosity is None or isinstance(verbosity, Integral), \
+            "verbosity needs to be of type int"
+        assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
+            "allowed verbosity values are: 0, 1 or 2"
+
         self._physical_ev3._lock.acquire()
 
         if reply:
@@ -557,13 +585,17 @@ class EV3:
             self._physical_ev3._lock.release()
             return msg_cnt
         else:
-            self._physical_ev3._lock.release()
-            return self._wait_for_system_reply(msg_cnt)
+            return self._wait_for_system_reply(
+                msg_cnt,
+                verbosity=verbosity,
+                _locked=True
+            )
 
     def _wait_for_system_reply(
             self,
             msg_cnt: bytes,
-            verbosity: Integral = None
+            verbosity: Integral = None,
+            _locked=False
     ) -> bytes:
         """
         Ask the LEGO EV3 for a system command reply and wait until received
@@ -584,15 +616,21 @@ class EV3:
         assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
 
-        self._physical_ev3._lock.acquire()
+        if not _locked:
+            self._physical_ev3._lock.acquire()
 
         # reply already in buffer?
         reply = self._physical_ev3._reply_buffer.pop(msg_cnt, None)
         if reply is not None:
             self._physical_ev3._lock.release()
-            if reply[4:5] != _SYSTEM_REPLY:
-                raise SysCmdError("error: {:02X}".format(reply[6]))
-            return reply
+            if reply[4:5] == _SYSTEM_REPLY:
+                return reply[6:]
+            raise SysCmdError(
+                "system command {:02X}:{:02X} replied error".format(
+                    reply[2],
+                    reply[3]
+                )
+            )
 
         #  get replies from EV3 device until msg_cnt fits
         while True:
@@ -639,10 +677,11 @@ class EV3:
                 )
             else:
                 self._physical_ev3._lock.release()
-                if reply[4:5] != _SYSTEM_REPLY:
-                    raise SysCmdError(
-                        "system command replied error: {:02X}".format(
-                            reply[6]
-                        )
+                if reply[4:5] == _SYSTEM_REPLY:
+                    return reply[6:len_data]
+                raise SysCmdError(
+                    "system command {:02X}:{:02X} replied error".format(
+                        reply[2],
+                        reply[3]
                     )
-                return reply[:len_data]
+                )

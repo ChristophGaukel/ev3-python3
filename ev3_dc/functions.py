@@ -32,7 +32,7 @@ def LCX(value: Integral) -> bytes:
 
 def LCS(value: str) -> bytes:
     """
-    pack a string into a LCS
+    pack a string into a LCS by adding a leading and a trailing byte
 
     Positional Argument
       value
