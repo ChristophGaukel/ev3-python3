@@ -1293,11 +1293,61 @@ Moving motors
 
 A number of operations is used for motor movements.
 
+Exact movements, blocking the EV3 brick
+.......................................
 
-Exact movements block the EV3 brick
-...................................
+Exact and smooth movements of a mootor are our first theme. We start
+with using four operations:
 
-Connect your EV3 medium motor with port C, connect your computer via
+*opOutput_Reset* = 0x|A2|
+
+  Arguments
+  
+    - (Data8) LAYER: chain layer number
+    - (Data8) NOS: port number (or a combination of port numbers)
+
+  The EV3 brick tracks exact movements and does some corrections of
+  overshooting or manual movements. *opOutput_Reset* resets these
+  tracking informations. It does not clear the counter.
+
+*opOutput_Step_Speed* = 0x|AE|
+
+  Arguments
+  
+    - (Data8) LAYER: chain layer number
+    - (Data8) NOS: port number (or a combination of port numbers)
+    - (Data8) SPEED: direction (sign) and speed of movement [-100, 100]
+    - (Data32) STEP1: length of acceleration
+    - (Data32) STEP2: length of constant speed movement
+    - (Data32) STEP3: length of deceleration
+    - (Data8) BRAKE: flag if ending with floating motor or active
+      break [0: Float, 1: Break]
+
+  This operation defines a smooth and exact movement of one or
+  multiple motors. Dependent from the mode, *STEP1*, *STEP2* and *STEP3* are
+  in degrees (default) or rotations.
+
+*opOutput_Ready* = 0x|AA|
+
+  Arguments
+  
+    - (Data8) LAYER: chain layer number
+    - (Data8) NOS: port number (or a combination of port numbers)
+
+  Starts the movement and waits until the movement has finished.
+
+*opOutput_Stop* = 0x|A3|
+
+  Arguments
+  
+    - (Data8) LAYER: chain layer number
+    - (Data8) NOS: port number (or a combination of port numbers)
+    - (Data8) BRAKE: flag if ending with floating motor or active
+      break [0: Float, 1: Break]
+
+  Stops the current movement of one or multiple motors.
+
+Connect your EV3 medium motor with port B, connect your computer via
 Bluetooth with your EV3 brick, replace the MAC-address with the one of
 your EV3 brick, then run this program:
 
@@ -1314,15 +1364,11 @@ your EV3 brick, then run this program:
   jukebox.song(ev3.FRERE_JACQUES).start()
   
   
-  def prepare():
+  def reset():
       ops = b''.join((
-          ev3.opOutput_Set_Type,
-          ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C),  # NOS
-          ev3.LCX(8),  # TYPE - Medium motor
           ev3.opOutput_Reset,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C)  # NOS
+          ev3.LCX(ev3.PORT_B)  # NOS
       ))
       my_ev3.send_direct_cmd(ops, sync_mode=ev3.SYNC)
   
@@ -1331,7 +1377,7 @@ your EV3 brick, then run this program:
       ops_step_speed = b''.join((
           ev3.opOutput_Step_Speed,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C),  # NOS
+          ev3.LCX(ev3.PORT_B),  # NOS
           ev3.LCX(speed),  # SPEED
           ev3.LCX(15),  # STEP1
           ev3.LCX(60),  # STEP2
@@ -1341,7 +1387,7 @@ your EV3 brick, then run this program:
       ops_ready = b''.join((
           ev3.opOutput_Ready,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C)  # NOS
+          ev3.LCX(ev3.PORT_B)  # NOS
       ))
       my_ev3.send_direct_cmd(ops_step_speed + ops_ready, sync_mode=ev3.SYNC)
   
@@ -1350,7 +1396,7 @@ your EV3 brick, then run this program:
       ops = b''.join((
           ev3.opOutput_Stop,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C),  # NOS
+          ev3.LCX(ev3.PORT_B),  # NOS
           ev3.LCX(0)  # BRAKE - no
       ))
       my_ev3.send_direct_cmd(ops)
@@ -1358,7 +1404,7 @@ your EV3 brick, then run this program:
   
   speed = 5
   
-  prepare()
+  reset()
   for i in range(5):
       step_speed(speed)
       step_speed(-speed)
@@ -1368,25 +1414,23 @@ your EV3 brick, then run this program:
   
 Some remarks:
 
-  - Function :py:func:`prepare` sets the type of port C and resets
-    the tacho counter of this port.
+  - Function :py:func:`reset` resets the tracking information of the
+    motor at port B.
   - Function :py:func:`step_speed` does a 90 ° smooth movement of the
-    medium motor. Dependent from the sign of SPEED the movement is
+    motor at port B. Dependent from the sign of SPEED the movement is
     forwards or backwards. The three numbers STEP1, STEP2 and
     STEP3 define the lengths of the acceleration, the constant speed
     and the deceleration phase, all of them in degrees. The movement
     ends with an active break, which holds the motor in a defined
-    position.
-  - Operation *opOutput_Ready* waits until the current movement
-    (here the *opOutput_Step_Speed* operation) has finished.
+    position. It waits until the movement has finished.
   - Function :py:func:`stop` releases the brake. This is done 0.2 sec.
     after the last movement has finished.
   - There are 10 slow and smooth movements of the motor, 5 times
     forwards and backwards. If you fix an infrared sensor on top of
     the shaft, this looks like headshaking. Changing the speed will
     change the character of the headshaking.
-  - Setting *sync_mode=SYNC* allows to get the reply after a movement
-    has finished.
+  - Setting *sync_mode=SYNC* allows to get the reply just when the
+    movement has finished.
   - The program plays the song *Frère Jacques* parallel to the motor
     movement.
   - Using two classes *EV3* and *Jukebox* is not necessary. *Jukebox*
@@ -1399,34 +1443,35 @@ The output:
 
 .. code-block:: none
 
-  13:03:36.605872 Sent 0x|0C:00|2A:00|00|00:00|A1:00:04:08:A2:00:04|
-  13:03:36.647234 Recv 0x|03:00|2A:00|02|
-  13:03:36.648280 Sent 0x|11:00|2D:00|00|00:00|AE:00:04:05:0F:81:3C:0F:01:AA:00:04|
-  13:03:37.814215 Recv 0x|03:00|2D:00|02|
-  13:03:37.814766 Sent 0x|11:00|2E:00|00|00:00|AE:00:04:3B:0F:81:3C:0F:01:AA:00:04|
-  13:03:38.923317 Recv 0x|03:00|2E:00|02|
-  13:03:38.923914 Sent 0x|11:00|2F:00|00|00:00|AE:00:04:05:0F:81:3C:0F:01:AA:00:04|
-  13:03:40.034365 Recv 0x|03:00|2F:00|02|
-  13:03:40.035664 Sent 0x|11:00|32:00|00|00:00|AE:00:04:3B:0F:81:3C:0F:01:AA:00:04|
-  13:03:41.124354 Recv 0x|03:00|32:00|02|
-  13:03:41.125463 Sent 0x|11:00|34:00|00|00:00|AE:00:04:05:0F:81:3C:0F:01:AA:00:04|
-  13:03:42.214335 Recv 0x|03:00|34:00|02|
-  13:03:42.215478 Sent 0x|11:00|37:00|00|00:00|AE:00:04:3B:0F:81:3C:0F:01:AA:00:04|
-  13:03:43.309308 Recv 0x|03:00|37:00|02|
-  13:03:43.310457 Sent 0x|11:00|39:00|00|00:00|AE:00:04:05:0F:81:3C:0F:01:AA:00:04|
-  13:03:44.427281 Recv 0x|03:00|39:00|02|
-  13:03:44.427894 Sent 0x|11:00|3A:00|00|00:00|AE:00:04:3B:0F:81:3C:0F:01:AA:00:04|
-  13:03:45.505264 Recv 0x|03:00|3A:00|02|
-  13:03:45.506624 Sent 0x|11:00|3E:00|00|00:00|AE:00:04:05:0F:81:3C:0F:01:AA:00:04|
-  13:03:46.601250 Recv 0x|03:00|3E:00|02|
-  13:03:46.601816 Sent 0x|11:00|3F:00|00|00:00|AE:00:04:3B:0F:81:3C:0F:01:AA:00:04|
-  13:03:47.686069 Recv 0x|03:00|3F:00|02|
-  13:03:47.886976 Sent 0x|09:00|43:00|80|00:00|A3:00:04:00|
-    
+  11:52:26.168681 Sent 0x|08:00|2A:00|00|00:00|A2:00:02|
+  11:52:26.247070 Recv 0x|03:00|2A:00|02|
+  11:52:26.248399 Sent 0x|11:00|2D:00|00|00:00|AE:00:02:05:0F:81:3C:0F:01:AA:00:02|
+  11:52:27.402000 Recv 0x|03:00|2D:00|02|
+  11:52:27.403093 Sent 0x|11:00|2F:00|00|00:00|AE:00:02:3B:0F:81:3C:0F:01:AA:00:02|
+  11:52:28.578030 Recv 0x|03:00|2F:00|02|
+  11:52:28.578578 Sent 0x|11:00|30:00|00|00:00|AE:00:02:05:0F:81:3C:0F:01:AA:00:02|
+  11:52:29.735028 Recv 0x|03:00|30:00|02|
+  11:52:29.736302 Sent 0x|11:00|33:00|00|00:00|AE:00:02:3B:0F:81:3C:0F:01:AA:00:02|
+  11:52:30.929957 Recv 0x|03:00|33:00|02|
+  11:52:30.930941 Sent 0x|11:00|35:00|00|00:00|AE:00:02:05:0F:81:3C:0F:01:AA:00:02|
+  11:52:32.089839 Recv 0x|03:00|35:00|02|
+  11:52:32.091088 Sent 0x|11:00|38:00|00|00:00|AE:00:02:3B:0F:81:3C:0F:01:AA:00:02|
+  11:52:33.220884 Recv 0x|03:00|38:00|02|
+  11:52:33.221437 Sent 0x|11:00|39:00|00|00:00|AE:00:02:05:0F:81:3C:0F:01:AA:00:02|
+  11:52:34.366040 Recv 0x|03:00|39:00|02|
+  11:52:34.367271 Sent 0x|11:00|3C:00|00|00:00|AE:00:02:3B:0F:81:3C:0F:01:AA:00:02|
+  11:52:35.536879 Recv 0x|03:00|3C:00|02|
+  11:52:35.537949 Sent 0x|11:00|3E:00|00|00:00|AE:00:02:05:0F:81:3C:0F:01:AA:00:02|
+  11:52:36.735035 Recv 0x|03:00|3E:00|02|
+  11:52:36.735600 Sent 0x|11:00|3F:00|00|00:00|AE:00:02:3B:0F:81:3C:0F:01:AA:00:02|
+  11:52:37.870978 Recv 0x|03:00|3F:00|02|
+  11:52:38.071796 Sent 0x|09:00|43:00|80|00:00|A3:00:02:00|
+      
 The movement of the motor is the expected, but the song is not! The
 movements last more than a second each and for this timespan, the EV3
 brick is blocked because operation *opOutput_Ready* lets the EV3 brick
-wait.
+wait. If you look at the message counters, you find some gaps, where
+direct commands of the sond were sent.
 
 What we heave learned: *If the timing is done in the direct command,
 this limits parallel execution.*
@@ -1435,13 +1480,36 @@ this limits parallel execution.*
 Exact Movements, not blocking
 .............................
 
-We modify the program, instead of using *opOutput_Ready*, we use
-*opOutput_Start* and we ask frequently if the movement still is in
-progress or has finished. This means more data traffic, but none of
-the requests blocks the EV3 brick.
+We modify the program and replace *opOutput_Ready* by *opOutput_Start*.
+While the movement takes place, we ask frequently if it still is
+in progress or has finished (done by *opOutput_Test*). This means more
+data traffic, but none of the requests will block the EV3 brick. We
+use these new operations:
 
-Connect your EV3 medium motor with port C, connect your computer via
-Wifi with your EV3 brick, replace the MAC-address with the one of
+*opOutput_Start* = 0x|A6|
+
+  Arguments
+  
+    - (Data8) LAYER: chain layer number
+    - (Data8) NOS: port number (or a combination of port numbers)
+
+  Starts the movement and does not wait until the movement has finished.
+
+*opOutput_Test* = 0x|A9|
+
+  Arguments
+  
+    - (Data8) LAYER: chain layer number
+    - (Data8) NOS: port number (or a combination of port numbers)
+  
+  Returns
+  
+    - (Data8) BUSY: flag if motor is busy [0 = Ready, 1 = Busy]
+
+  Tests if a motor is currently busy.
+
+Connect your EV3 medium motor with port B, connect your computer via
+Bluetooth with your EV3 brick, replace the MAC-address with the one of
 your EV3 brick, then run this program:
 
 .. code:: python3
@@ -1458,15 +1526,11 @@ your EV3 brick, then run this program:
   jukebox.song(ev3.FRERE_JACQUES).start()
   
   
-  def prepare():
+  def reset():
       ops = b''.join((
-          ev3.opOutput_Set_Type,
-          ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C),  # NOS
-          ev3.LCX(8),  # TYPE - Medium motor
           ev3.opOutput_Reset,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C)  # NOS
+          ev3.LCX(ev3.PORT_B)  # NOS
       ))
       my_ev3.send_direct_cmd(ops, sync_mode=ev3.SYNC)
   
@@ -1475,7 +1539,7 @@ your EV3 brick, then run this program:
       ops_step_speed = b''.join((
           ev3.opOutput_Step_Speed,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C),  # NOS
+          ev3.LCX(ev3.PORT_B),  # NOS
           ev3.LCX(speed),  # SPEED
           ev3.LCX(15),  # STEP1
           ev3.LCX(60),  # STEP2
@@ -1485,7 +1549,7 @@ your EV3 brick, then run this program:
       ops_start = b''.join((
           ev3.opOutput_Start,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C)  # NOS
+          ev3.LCX(ev3.PORT_B)  # NOS
       ))
       my_ev3.send_direct_cmd(ops_step_speed + ops_start)
   
@@ -1494,7 +1558,7 @@ your EV3 brick, then run this program:
       ops = b''.join((
           ev3.opOutput_Test,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C),  # NOS
+          ev3.LCX(ev3.PORT_B),  # NOS
           ev3.GVX(0)  # BUSY
       ))
       reply = my_ev3.send_direct_cmd(ops, global_mem=4)
@@ -1505,7 +1569,7 @@ your EV3 brick, then run this program:
       ops = b''.join((
           ev3.opOutput_Stop,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C),  # NOS
+          ev3.LCX(ev3.PORT_B),  # NOS
           ev3.LCX(0)  # BRAKE - no
       ))
       my_ev3.send_direct_cmd(ops)
@@ -1513,13 +1577,15 @@ your EV3 brick, then run this program:
   
   speed = 5
   
-  prepare()
+  reset()
   for i in range(5):
       step_speed(speed)
+      sleep(.2)
       while test():
           sleep(.2)
   
       step_speed(-speed)
+      sleep(.2)
       while test():
           sleep(.2)
   
@@ -1540,192 +1606,170 @@ The output:
 
 .. code-block:: none
 
-  13:07:55.041998 Sent 0x|0C:00|2A:00|00|00:00|A1:00:04:08:A2:00:04|
-  13:07:55.113310 Recv 0x|03:00|2A:00|02|
-  13:07:55.113883 Sent 0x|11:00|2B:00|80|00:00|AE:00:04:05:0F:81:3C:0F:01:A6:00:04|
-  13:07:55.114853 Sent 0x|09:00|2E:00|00|04:00|A9:00:04:60|
-  13:07:55.153222 Recv 0x|07:00|2E:00|02|01:00:00:00|
-  13:07:55.354035 Sent 0x|09:00|2F:00|00|04:00|A9:00:04:60|
-  13:07:55.398233 Recv 0x|07:00|2F:00|02|01:00:00:00|
-  13:07:55.599135 Sent 0x|09:00|30:00|00|04:00|A9:00:04:60|
-  13:07:55.636234 Recv 0x|07:00|30:00|02|01:00:00:00|
-  13:07:55.837061 Sent 0x|09:00|32:00|00|04:00|A9:00:04:60|
-  13:07:55.872174 Recv 0x|07:00|32:00|02|01:00:00:00|
-  13:07:56.072891 Sent 0x|09:00|33:00|00|04:00|A9:00:04:60|
-  13:07:56.113274 Recv 0x|07:00|33:00|02|01:00:00:00|
-  13:07:56.314191 Sent 0x|09:00|35:00|00|04:00|A9:00:04:60|
-  13:07:56.351244 Recv 0x|07:00|35:00|02|00:00:00:00|
-  13:07:56.351700 Sent 0x|11:00|36:00|80|00:00|AE:00:04:3B:0F:81:3C:0F:01:A6:00:04|
-  13:07:56.352497 Sent 0x|09:00|37:00|00|04:00|A9:00:04:60|
-  13:07:56.388243 Recv 0x|07:00|37:00|02|01:00:00:00|
-  13:07:56.589178 Sent 0x|09:00|38:00|00|04:00|A9:00:04:60|
-  13:07:56.626238 Recv 0x|07:00|38:00|02|01:00:00:00|
-  13:07:56.827141 Sent 0x|09:00|39:00|00|04:00|A9:00:04:60|
-  13:07:56.889289 Recv 0x|07:00|39:00|02|01:00:00:00|
-  13:07:57.090144 Sent 0x|09:00|3B:00|00|04:00|A9:00:04:60|
-  13:07:57.136205 Recv 0x|07:00|3B:00|02|01:00:00:00|
-  13:07:57.337015 Sent 0x|09:00|3C:00|00|04:00|A9:00:04:60|
-  13:07:57.397386 Recv 0x|07:00|3C:00|02|01:00:00:00|
-  13:07:57.598350 Sent 0x|09:00|3F:00|00|04:00|A9:00:04:60|
-  13:07:57.654115 Recv 0x|07:00|3F:00|02|00:00:00:00|
-  13:07:57.654501 Sent 0x|11:00|40:00|80|00:00|AE:00:04:05:0F:81:3C:0F:01:A6:00:04|
-  13:07:57.654757 Sent 0x|09:00|41:00|00|04:00|A9:00:04:60|
-  13:07:57.748313 Recv 0x|07:00|41:00|02|01:00:00:00|
-  13:07:57.949263 Sent 0x|09:00|42:00|00|04:00|A9:00:04:60|
-  13:07:58.031262 Recv 0x|07:00|42:00|02|01:00:00:00|
-  13:07:58.232120 Sent 0x|09:00|44:00|00|04:00|A9:00:04:60|
-  13:07:58.284231 Recv 0x|07:00|44:00|02|01:00:00:00|
-  13:07:58.488698 Sent 0x|09:00|45:00|00|04:00|A9:00:04:60|
-  13:07:58.529164 Recv 0x|07:00|45:00|02|01:00:00:00|
-  13:07:58.730003 Sent 0x|09:00|47:00|00|04:00|A9:00:04:60|
-  13:07:58.768157 Recv 0x|07:00|47:00|02|01:00:00:00|
-  13:07:58.969070 Sent 0x|09:00|48:00|00|04:00|A9:00:04:60|
-  13:07:59.006252 Recv 0x|07:00|48:00|02|00:00:00:00|
-  13:07:59.006638 Sent 0x|11:00|49:00|80|00:00|AE:00:04:3B:0F:81:3C:0F:01:A6:00:04|
-  13:07:59.006928 Sent 0x|09:00|4A:00|00|04:00|A9:00:04:60|
-  13:07:59.042180 Recv 0x|07:00|4A:00|02|01:00:00:00|
-  13:07:59.243014 Sent 0x|09:00|4B:00|00|04:00|A9:00:04:60|
-  13:07:59.281222 Recv 0x|07:00|4B:00|02|01:00:00:00|
-  13:07:59.482081 Sent 0x|09:00|4D:00|00|04:00|A9:00:04:60|
-  13:07:59.561269 Recv 0x|07:00|4D:00|02|01:00:00:00|
-  13:07:59.762133 Sent 0x|09:00|4E:00|00|04:00|A9:00:04:60|
-  13:07:59.801158 Recv 0x|07:00|4E:00|02|01:00:00:00|
-  13:08:00.001978 Sent 0x|09:00|51:00|00|04:00|A9:00:04:60|
-  13:08:00.062103 Recv 0x|07:00|51:00|02|01:00:00:00|
-  13:08:00.262997 Sent 0x|09:00|52:00|00|04:00|A9:00:04:60|
-  13:08:00.316139 Recv 0x|07:00|52:00|02|00:00:00:00|
-  13:08:00.316578 Sent 0x|11:00|53:00|80|00:00|AE:00:04:05:0F:81:3C:0F:01:A6:00:04|
-  13:08:00.316844 Sent 0x|09:00|54:00|00|04:00|A9:00:04:60|
-  13:08:00.382341 Recv 0x|07:00|54:00|02|01:00:00:00|
-  13:08:00.583257 Sent 0x|09:00|56:00|00|04:00|A9:00:04:60|
-  13:08:00.676297 Recv 0x|07:00|56:00|02|01:00:00:00|
-  13:08:00.877230 Sent 0x|09:00|57:00|00|04:00|A9:00:04:60|
-  13:08:00.925141 Recv 0x|07:00|57:00|02|01:00:00:00|
-  13:08:01.126119 Sent 0x|09:00|59:00|00|04:00|A9:00:04:60|
-  13:08:01.162266 Recv 0x|07:00|59:00|02|01:00:00:00|
-  13:08:01.363105 Sent 0x|09:00|5A:00|00|04:00|A9:00:04:60|
-  13:08:01.400151 Recv 0x|07:00|5A:00|02|01:00:00:00|
-  13:08:01.601098 Sent 0x|09:00|5B:00|00|04:00|A9:00:04:60|
-  13:08:01.645123 Recv 0x|07:00|5B:00|02|00:00:00:00|
-  13:08:01.645677 Sent 0x|11:00|5C:00|80|00:00|AE:00:04:3B:0F:81:3C:0F:01:A6:00:04|
-  13:08:01.646127 Sent 0x|09:00|5D:00|00|04:00|A9:00:04:60|
-  13:08:01.682154 Recv 0x|07:00|5D:00|02|01:00:00:00|
-  13:08:01.883141 Sent 0x|09:00|5E:00|00|04:00|A9:00:04:60|
-  13:08:01.920102 Recv 0x|07:00|5E:00|02|01:00:00:00|
-  13:08:02.120889 Sent 0x|09:00|5F:00|00|04:00|A9:00:04:60|
-  13:08:02.160165 Recv 0x|07:00|5F:00|02|01:00:00:00|
-  13:08:02.360915 Sent 0x|09:00|62:00|00|04:00|A9:00:04:60|
-  13:08:02.397189 Recv 0x|07:00|62:00|02|01:00:00:00|
-  13:08:02.597976 Sent 0x|09:00|63:00|00|04:00|A9:00:04:60|
-  13:08:02.660192 Recv 0x|07:00|63:00|02|01:00:00:00|
-  13:08:02.861155 Sent 0x|09:00|65:00|00|04:00|A9:00:04:60|
-  13:08:02.898085 Recv 0x|07:00|65:00|02|00:00:00:00|
-  13:08:02.898633 Sent 0x|11:00|66:00|80|00:00|AE:00:04:05:0F:81:3C:0F:01:A6:00:04|
-  13:08:02.899055 Sent 0x|09:00|67:00|00|04:00|A9:00:04:60|
-  13:08:02.935094 Recv 0x|07:00|67:00|02|01:00:00:00|
-  13:08:03.136089 Sent 0x|09:00|68:00|00|04:00|A9:00:04:60|
-  13:08:03.172185 Recv 0x|07:00|68:00|02|01:00:00:00|
-  13:08:03.372951 Sent 0x|09:00|69:00|00|04:00|A9:00:04:60|
-  13:08:03.410162 Recv 0x|07:00|69:00|02|01:00:00:00|
-  13:08:03.611147 Sent 0x|09:00|6B:00|00|04:00|A9:00:04:60|
-  13:08:03.648133 Recv 0x|07:00|6B:00|02|01:00:00:00|
-  13:08:03.849032 Sent 0x|09:00|6C:00|00|04:00|A9:00:04:60|
-  13:08:03.896073 Recv 0x|07:00|6C:00|02|01:00:00:00|
-  13:08:04.096970 Sent 0x|09:00|6D:00|00|04:00|A9:00:04:60|
-  13:08:04.133113 Recv 0x|07:00|6D:00|02|00:00:00:00|
-  13:08:04.133566 Sent 0x|11:00|6E:00|80|00:00|AE:00:04:3B:0F:81:3C:0F:01:A6:00:04|
-  13:08:04.133903 Sent 0x|09:00|6F:00|00|04:00|A9:00:04:60|
-  13:08:04.170198 Recv 0x|07:00|6F:00|02|01:00:00:00|
-  13:08:04.371073 Sent 0x|09:00|70:00|00|04:00|A9:00:04:60|
-  13:08:04.432159 Recv 0x|07:00|70:00|02|01:00:00:00|
-  13:08:04.632976 Sent 0x|09:00|71:00|00|04:00|A9:00:04:60|
-  13:08:04.682204 Recv 0x|07:00|71:00|02|01:00:00:00|
-  13:08:04.883438 Sent 0x|09:00|74:00|00|04:00|A9:00:04:60|
-  13:08:04.921126 Recv 0x|07:00|74:00|02|01:00:00:00|
-  13:08:05.121975 Sent 0x|09:00|76:00|00|04:00|A9:00:04:60|
-  13:08:05.158072 Recv 0x|07:00|76:00|02|01:00:00:00|
-  13:08:05.359032 Sent 0x|09:00|78:00|00|04:00|A9:00:04:60|
-  13:08:05.421040 Recv 0x|07:00|78:00|02|00:00:00:00|
-  13:08:05.421427 Sent 0x|11:00|79:00|80|00:00|AE:00:04:05:0F:81:3C:0F:01:A6:00:04|
-  13:08:05.421685 Sent 0x|09:00|7A:00|00|04:00|A9:00:04:60|
-  13:08:05.457028 Recv 0x|07:00|7A:00|02|01:00:00:00|
-  13:08:05.657988 Sent 0x|09:00|7C:00|00|04:00|A9:00:04:60|
-  13:08:05.693119 Recv 0x|07:00|7C:00|02|01:00:00:00|
-  13:08:05.894086 Sent 0x|09:00|7E:00|00|04:00|A9:00:04:60|
-  13:08:05.931054 Recv 0x|07:00|7E:00|02|01:00:00:00|
-  13:08:06.132000 Sent 0x|09:00|7F:00|00|04:00|A9:00:04:60|
-  13:08:06.168059 Recv 0x|07:00|7F:00|02|01:00:00:00|
-  13:08:06.369037 Sent 0x|09:00|80:00|00|04:00|A9:00:04:60|
-  13:08:06.431267 Recv 0x|07:00|80:00|02|01:00:00:00|
-  13:08:06.632150 Sent 0x|09:00|82:00|00|04:00|A9:00:04:60|
-  13:08:06.667121 Recv 0x|07:00|82:00|02|00:00:00:00|
-  13:08:06.667692 Sent 0x|11:00|83:00|80|00:00|AE:00:04:3B:0F:81:3C:0F:01:A6:00:04|
-  13:08:06.668142 Sent 0x|09:00|84:00|00|04:00|A9:00:04:60|
-  13:08:06.705128 Recv 0x|07:00|84:00|02|01:00:00:00|
-  13:08:06.906077 Sent 0x|09:00|85:00|00|04:00|A9:00:04:60|
-  13:08:06.942083 Recv 0x|07:00|85:00|02|01:00:00:00|
-  13:08:07.142931 Sent 0x|09:00|88:00|00|04:00|A9:00:04:60|
-  13:08:07.180151 Recv 0x|07:00|88:00|02|01:00:00:00|
-  13:08:07.381093 Sent 0x|09:00|89:00|00|04:00|A9:00:04:60|
-  13:08:07.417028 Recv 0x|07:00|89:00|02|01:00:00:00|
-  13:08:07.617959 Sent 0x|09:00|8B:00|00|04:00|A9:00:04:60|
-  13:08:07.655037 Recv 0x|07:00|8B:00|02|01:00:00:00|
-  13:08:07.856157 Sent 0x|09:00|8D:00|00|04:00|A9:00:04:60|
-  13:08:07.892093 Recv 0x|07:00|8D:00|02|00:00:00:00|
-  13:08:08.093030 Sent 0x|09:00|8F:00|80|00:00|A3:00:04:00|
-  
+  12:21:08.851739 Sent 0x|08:00|2A:00|00|00:00|A2:00:02|
+  12:21:08.903092 Recv 0x|03:00|2A:00|02|
+  12:21:08.904440 Sent 0x|11:00|2D:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:21:09.105336 Sent 0x|09:00|2E:00|00|01:00|A9:00:02:60|
+  12:21:09.174974 Recv 0x|04:00|2E:00|02|01|
+  12:21:09.375951 Sent 0x|09:00|2F:00|00|01:00|A9:00:02:60|
+  12:21:09.444917 Recv 0x|04:00|2F:00|02|01|
+  12:21:09.645735 Sent 0x|09:00|31:00|00|01:00|A9:00:02:60|
+  12:21:09.715081 Recv 0x|04:00|31:00|02|01|
+  12:21:09.916029 Sent 0x|09:00|32:00|00|01:00|A9:00:02:60|
+  12:21:09.991093 Recv 0x|04:00|32:00|02|01|
+  12:21:10.191946 Sent 0x|09:00|34:00|00|01:00|A9:00:02:60|
+  12:21:10.262916 Recv 0x|04:00|34:00|02|00|
+  12:21:10.263476 Sent 0x|11:00|35:00|80|00:00|AE:00:02:3B:0F:81:3C:0F:01:A6:00:02|
+  12:21:10.464500 Sent 0x|09:00|36:00|00|01:00|A9:00:02:60|
+  12:21:10.535111 Recv 0x|04:00|36:00|02|01|
+  12:21:10.736109 Sent 0x|09:00|38:00|00|01:00|A9:00:02:60|
+  12:21:10.777892 Recv 0x|04:00|38:00|02|01|
+  12:21:10.978716 Sent 0x|09:00|39:00|00|01:00|A9:00:02:60|
+  12:21:11.044970 Recv 0x|04:00|39:00|02|01|
+  12:21:11.245923 Sent 0x|09:00|3A:00|00|01:00|A9:00:02:60|
+  12:21:11.303016 Recv 0x|04:00|3A:00|02|01|
+  12:21:11.504236 Sent 0x|09:00|3D:00|00|01:00|A9:00:02:60|
+  12:21:11.575097 Recv 0x|04:00|3D:00|02|00|
+  12:21:11.575639 Sent 0x|11:00|3E:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:21:11.776573 Sent 0x|09:00|3F:00|00|01:00|A9:00:02:60|
+  12:21:11.842046 Recv 0x|04:00|3F:00|02|01|
+  12:21:12.043106 Sent 0x|09:00|41:00|00|01:00|A9:00:02:60|
+  12:21:12.112103 Recv 0x|04:00|41:00|02|01|
+  12:21:12.313026 Sent 0x|09:00|42:00|00|01:00|A9:00:02:60|
+  12:21:12.375051 Recv 0x|04:00|42:00|02|01|
+  12:21:12.575968 Sent 0x|09:00|44:00|00|01:00|A9:00:02:60|
+  12:21:12.637077 Recv 0x|04:00|44:00|02|01|
+  12:21:12.838115 Sent 0x|09:00|45:00|00|01:00|A9:00:02:60|
+  12:21:12.908110 Recv 0x|04:00|45:00|02|00|
+  12:21:12.908696 Sent 0x|11:00|46:00|80|00:00|AE:00:02:3B:0F:81:3C:0F:01:A6:00:02|
+  12:21:13.109496 Sent 0x|09:00|48:00|00|01:00|A9:00:02:60|
+  12:21:13.121873 Recv 0x|04:00|48:00|02|01|
+  12:21:13.322848 Sent 0x|09:00|49:00|00|01:00|A9:00:02:60|
+  12:21:13.402117 Recv 0x|04:00|49:00|02|01|
+  12:21:13.603152 Sent 0x|09:00|4A:00|00|01:00|A9:00:02:60|
+  12:21:13.657882 Recv 0x|04:00|4A:00|02|01|
+  12:21:13.858904 Sent 0x|09:00|4D:00|00|01:00|A9:00:02:60|
+  12:21:13.899888 Recv 0x|04:00|4D:00|02|01|
+  12:21:14.100762 Sent 0x|09:00|4E:00|00|01:00|A9:00:02:60|
+  12:21:14.144913 Recv 0x|04:00|4E:00|02|00|
+  12:21:14.145297 Sent 0x|11:00|4F:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:21:14.346331 Sent 0x|09:00|51:00|00|01:00|A9:00:02:60|
+  12:21:14.389892 Recv 0x|04:00|51:00|02|01|
+  12:21:14.590822 Sent 0x|09:00|52:00|00|01:00|A9:00:02:60|
+  12:21:14.657997 Recv 0x|04:00|52:00|02|01|
+  12:21:14.858864 Sent 0x|09:00|54:00|00|01:00|A9:00:02:60|
+  12:21:14.944139 Recv 0x|04:00|54:00|02|01|
+  12:21:15.145073 Sent 0x|09:00|55:00|00|01:00|A9:00:02:60|
+  12:21:15.206087 Recv 0x|04:00|55:00|02|01|
+  12:21:15.407067 Sent 0x|09:00|56:00|00|01:00|A9:00:02:60|
+  12:21:15.476913 Recv 0x|04:00|56:00|02|00|
+  12:21:15.477296 Sent 0x|11:00|57:00|80|00:00|AE:00:02:3B:0F:81:3C:0F:01:A6:00:02|
+  12:21:15.678152 Sent 0x|09:00|58:00|00|01:00|A9:00:02:60|
+  12:21:15.746237 Recv 0x|04:00|58:00|02|01|
+  12:21:15.947113 Sent 0x|09:00|59:00|00|01:00|A9:00:02:60|
+  12:21:16.008946 Recv 0x|04:00|59:00|02|01|
+  12:21:16.209772 Sent 0x|09:00|5C:00|00|01:00|A9:00:02:60|
+  12:21:16.286122 Recv 0x|04:00|5C:00|02|01|
+  12:21:16.488816 Sent 0x|09:00|5D:00|00|01:00|A9:00:02:60|
+  12:21:16.611171 Recv 0x|04:00|5D:00|02|01|
+  12:21:16.812098 Sent 0x|09:00|5F:00|00|01:00|A9:00:02:60|
+  12:21:16.895091 Recv 0x|04:00|5F:00|02|00|
+  12:21:16.895637 Sent 0x|11:00|60:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:21:17.096654 Sent 0x|09:00|61:00|00|01:00|A9:00:02:60|
+  12:21:17.138906 Recv 0x|04:00|61:00|02|01|
+  12:21:17.339764 Sent 0x|09:00|63:00|00|01:00|A9:00:02:60|
+  12:21:17.400990 Recv 0x|04:00|63:00|02|01|
+  12:21:17.601883 Sent 0x|09:00|64:00|00|01:00|A9:00:02:60|
+  12:21:17.638926 Recv 0x|04:00|64:00|02|01|
+  12:21:17.839940 Sent 0x|09:00|65:00|00|01:00|A9:00:02:60|
+  12:21:17.910139 Recv 0x|04:00|65:00|02|01|
+  12:21:18.111050 Sent 0x|09:00|66:00|00|01:00|A9:00:02:60|
+  12:21:18.176911 Recv 0x|04:00|66:00|02|00|
+  12:21:18.177386 Sent 0x|11:00|67:00|80|00:00|AE:00:02:3B:0F:81:3C:0F:01:A6:00:02|
+  12:21:18.378438 Sent 0x|09:00|68:00|00|01:00|A9:00:02:60|
+  12:21:18.454102 Recv 0x|04:00|68:00|02|01|
+  12:21:18.655531 Sent 0x|09:00|6B:00|00|01:00|A9:00:02:60|
+  12:21:18.699933 Recv 0x|04:00|6B:00|02|01|
+  12:21:18.900855 Sent 0x|09:00|6C:00|00|01:00|A9:00:02:60|
+  12:21:18.956985 Recv 0x|04:00|6C:00|02|01|
+  12:21:19.158315 Sent 0x|09:00|6F:00|00|01:00|A9:00:02:60|
+  12:21:19.205918 Recv 0x|04:00|6F:00|02|01|
+  12:21:19.406850 Sent 0x|09:00|71:00|00|01:00|A9:00:02:60|
+  12:21:19.455956 Recv 0x|04:00|71:00|02|00|
+  12:21:19.456500 Sent 0x|11:00|72:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:21:19.657513 Sent 0x|09:00|73:00|00|01:00|A9:00:02:60|
+  12:21:19.722027 Recv 0x|04:00|73:00|02|01|
+  12:21:19.923390 Sent 0x|09:00|75:00|00|01:00|A9:00:02:60|
+  12:21:19.961935 Recv 0x|04:00|75:00|02|01|
+  12:21:20.162824 Sent 0x|09:00|76:00|00|01:00|A9:00:02:60|
+  12:21:20.234139 Recv 0x|04:00|76:00|02|01|
+  12:21:20.435034 Sent 0x|09:00|78:00|00|01:00|A9:00:02:60|
+  12:21:20.480964 Recv 0x|04:00|78:00|02|01|
+  12:21:20.681819 Sent 0x|09:00|79:00|00|01:00|A9:00:02:60|
+  12:21:20.735111 Recv 0x|04:00|79:00|02|00|
+  12:21:20.735661 Sent 0x|11:00|7A:00|80|00:00|AE:00:02:3B:0F:81:3C:0F:01:A6:00:02|
+  12:21:20.936434 Sent 0x|09:00|7D:00|00|01:00|A9:00:02:60|
+  12:21:20.985048 Recv 0x|04:00|7D:00|02|01|
+  12:21:21.185991 Sent 0x|09:00|7E:00|00|01:00|A9:00:02:60|
+  12:21:21.255167 Recv 0x|04:00|7E:00|02|01|
+  12:21:21.456068 Sent 0x|09:00|80:00|00|01:00|A9:00:02:60|
+  12:21:21.519136 Recv 0x|04:00|80:00|02|01|
+  12:21:21.720515 Sent 0x|09:00|82:00|00|01:00|A9:00:02:60|
+  12:21:21.780126 Recv 0x|04:00|82:00|02|01|
+  12:21:21.981291 Sent 0x|09:00|84:00|00|01:00|A9:00:02:60|
+  12:21:22.033996 Recv 0x|04:00|84:00|02|00|
+  12:21:22.235006 Sent 0x|09:00|86:00|80|00:00|A3:00:02:00|
+      
 Some remarks:
 
   - Much more data traffic, but smooth and correct execution of
     movements, tones and LED lights.
-  - All the direct commands block the EV3 brick only for a very short
+  - All these direct commands block the EV3 brick only for a very short
     timespan, short enough to be not recognized.
-  - The message counters show gaps, where the direct commands
-    of the song have been sent.
+  - As before, the message counters show gaps, where the direct
+    commands of the song have been sent. But now, they were sent with
+    a correct timing.
 
-You can easily imagine, how adding some movements of the whole robot
-will complicate the code. Therefore it's good practice to separate the
-the tasks. Here the song has been separated as a `thread task
+You can easily imagine, how adding some more motors or sensors will
+complicate the code. Therefore it's good practice to separate the
+tasks. Here the song has been separated as a `thread task
 <https://thread-task.readthedocs.io/en/latest/>`_ object and we didn't
-need to care about its internals.
+care about its internals.
     
 
 Exact Movements as a Thread Task
 ................................
 
 We modify this program once more and create a `thread task
-<https://thread-task.readthedocs.io/en/latest/>`_ object, which can be
-started and stopped. This will play the song and move the motor. Doing
-so helps to build applications of more and more parallel activities.
+<https://thread-task.readthedocs.io/en/latest/>`_ object for both, the
+motor movement and the song, which can be started and
+stopped. Encapsulating activities into thread task objects helps to
+code applications of more and more parallel actions.
 
-Connect your EV3 medium motor with port C, connect your computer via
-Wifi with your EV3 brick, replace the MAC-address with the one of your
+Connect your EV3 medium motor with port B, connect your computer via
+Bluetooth with your EV3 brick, replace the MAC-address with the one of your
 EV3 brick, then run this program:
 
 .. code:: python3
   
   import ev3_dc as ev3
   import struct
-  from thread_task import Task, Periodic, Repeated
+  from thread_task import Task, Periodic, Repeated, Sleep
   from time import sleep
   
   
-  my_ev3 = ev3.EV3(protocol=ev3.WIFI, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
   my_ev3.verbosity = 1
   
   jukebox = ev3.Jukebox(ev3_obj=my_ev3)
   
   
-  def prepare():
+  def reset():
       my_ev3.send_direct_cmd(
           b''.join((
-              ev3.opOutput_Set_Type,
-              ev3.LCX(0),  # LAYER
-              ev3.LCX(ev3.PORT_C),  # NOS
-              ev3.LCX(8),  # TYPE - Medium motor
               ev3.opOutput_Reset,
               ev3.LCX(0),  # LAYER
-              ev3.LCX(ev3.PORT_C)  # NOS
+              ev3.LCX(ev3.PORT_B)  # NOS
           )),
           sync_mode=ev3.SYNC
       )
@@ -1736,7 +1780,7 @@ EV3 brick, then run this program:
           b''.join((
               ev3.opOutput_Step_Speed,
               ev3.LCX(0),  # LAYER
-              ev3.LCX(ev3.PORT_C),  # NOS
+              ev3.LCX(ev3.PORT_B),  # NOS
               ev3.LCX(speed),  # SPEED
               ev3.LCX(15),  # STEP1
               ev3.LCX(60),  # STEP2
@@ -1744,7 +1788,7 @@ EV3 brick, then run this program:
               ev3.LCX(1),  # BRAKE - yes
               ev3.opOutput_Start,
               ev3.LCX(0),  # LAYER
-              ev3.LCX(ev3.PORT_C)  # NOS
+              ev3.LCX(ev3.PORT_B)  # NOS
           ))
       )
   
@@ -1753,15 +1797,12 @@ EV3 brick, then run this program:
       ops = b''.join((
           ev3.opOutput_Test,
           ev3.LCX(0),  # LAYER
-          ev3.LCX(ev3.PORT_C),  # NOS
+          ev3.LCX(ev3.PORT_B),  # NOS
           ev3.GVX(0)  # BUSY
       ))
-      reply = my_ev3.send_direct_cmd(ops, global_mem=4)
-      busy = struct.unpack('<i', reply)[0]
-      if busy:
-          return False
-      else:
-          return True
+      reply = my_ev3.send_direct_cmd(ops, global_mem=1)
+      busy = struct.unpack('<b', reply)[0]
+      return False if busy else True
   
   
   def stop():
@@ -1769,42 +1810,351 @@ EV3 brick, then run this program:
           b''.join((
               ev3.opOutput_Stop,
               ev3.LCX(0),  # LAYER
-              ev3.LCX(ev3.PORT_C),  # NOS
+              ev3.LCX(ev3.PORT_B),  # NOS
               ev3.LCX(0)  # BRAKE - no
           ))
       )
   
   
   speed = 5
-
+  
   t_song = jukebox.song(ev3.FRERE_JACQUES)
   
-  t_forwards = Task(step_speed, args=(speed,)) + Periodic(.2, test)
+  t_forwards = (
+      Task(step_speed, args=(speed,), duration=.2) +
+      Periodic(.2, test)
+  )
   t_forwards.action_stop = stop
   
-  t_backwards = Task(step_speed, args=(-speed,)) + Periodic(.2, test)
-  t_backwards.action_stop = stop
+  t_backwards = (
+      Task(step_speed, args=(-speed,), duration=.2) +
+      Periodic(.2, test)
+  )
   
   t = (
       Task(t_song.start) +
-      Task(prepare) +
+      Task(reset) +
       Repeated(
-          Task(t_forwards) + Task(t_backwards),
+          t_forwards + t_backwards,
           num=5
       ) +
+      Sleep(.2) +
       Task(stop)
   )
   
   t.start()
   
-  sleep(2)
+  sleep(8)
   t.stop()
-
+  
 Some remarks:
+
+  - periodic ends, when its action returns True. This is why function
+    :py:func:`test` returns the opposite of the expected.
   - Nearly all of the program is about creating t as a thread task
     object. Its execution is only the few lines at the end. You can
     easily imagine to hide the creation behind the public API of a
     class.
   - The parallel execution of motor movements and playing a song is handled inside of t.
+  - Stopping is quite easy. The logic, how to stop the activities is
+    hidden insite the thread task.
   - This thread task is not perfect because its continuation logic is not proper coded.
 
+The output:
+
+.. code-block:: none
+
+  12:48:40.569302 Sent 0x|08:00|2A:00|00|00:00|A2:00:02|
+  12:48:40.648679 Recv 0x|03:00|2A:00|02|
+  12:48:40.649948 Sent 0x|11:00|2D:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:48:40.849774 Sent 0x|09:00|2E:00|00|01:00|A9:00:02:60|
+  12:48:40.896519 Recv 0x|04:00|2E:00|02|01|
+  12:48:41.050036 Sent 0x|09:00|2F:00|00|01:00|A9:00:02:60|
+  12:48:41.098628 Recv 0x|04:00|2F:00|02|01|
+  12:48:41.250406 Sent 0x|09:00|31:00|00|01:00|A9:00:02:60|
+  12:48:41.318686 Recv 0x|04:00|31:00|02|01|
+  12:48:41.450778 Sent 0x|09:00|32:00|00|01:00|A9:00:02:60|
+  12:48:41.494671 Recv 0x|04:00|32:00|02|01|
+  12:48:41.651188 Sent 0x|09:00|33:00|00|01:00|A9:00:02:60|
+  12:48:41.703649 Recv 0x|04:00|33:00|02|01|
+  12:48:41.851603 Sent 0x|09:00|35:00|00|01:00|A9:00:02:60|
+  12:48:41.943683 Recv 0x|04:00|35:00|02|00|
+  12:48:41.944486 Sent 0x|11:00|36:00|80|00:00|AE:00:02:3B:0F:81:3C:0F:01:A6:00:02|
+  12:48:42.144719 Sent 0x|09:00|37:00|00|01:00|A9:00:02:60|
+  12:48:42.211513 Recv 0x|04:00|37:00|02|01|
+  12:48:42.344999 Sent 0x|09:00|38:00|00|01:00|A9:00:02:60|
+  12:48:42.385481 Recv 0x|04:00|38:00|02|01|
+  12:48:42.545455 Sent 0x|09:00|3A:00|00|01:00|A9:00:02:60|
+  12:48:42.598677 Recv 0x|04:00|3A:00|02|01|
+  12:48:42.745691 Sent 0x|09:00|3B:00|00|01:00|A9:00:02:60|
+  12:48:42.799659 Recv 0x|04:00|3B:00|02|01|
+  12:48:42.946066 Sent 0x|09:00|3C:00|00|01:00|A9:00:02:60|
+  12:48:43.031706 Recv 0x|04:00|3C:00|02|01|
+  12:48:43.146600 Sent 0x|09:00|3F:00|00|01:00|A9:00:02:60|
+  12:48:43.207665 Recv 0x|04:00|3F:00|02|00|
+  12:48:43.208658 Sent 0x|11:00|40:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:48:43.409048 Sent 0x|09:00|41:00|00|01:00|A9:00:02:60|
+  12:48:43.482677 Recv 0x|04:00|41:00|02|01|
+  12:48:43.609350 Sent 0x|09:00|43:00|00|01:00|A9:00:02:60|
+  12:48:43.659614 Recv 0x|04:00|43:00|02|01|
+  12:48:43.809783 Sent 0x|09:00|44:00|00|01:00|A9:00:02:60|
+  12:48:43.867547 Recv 0x|04:00|44:00|02|01|
+  12:48:44.009999 Sent 0x|09:00|45:00|00|01:00|A9:00:02:60|
+  12:48:44.067605 Recv 0x|04:00|45:00|02|01|
+  12:48:44.210310 Sent 0x|09:00|47:00|00|01:00|A9:00:02:60|
+  12:48:44.295689 Recv 0x|04:00|47:00|02|01|
+  12:48:44.410610 Sent 0x|09:00|48:00|00|01:00|A9:00:02:60|
+  12:48:44.472626 Recv 0x|04:00|48:00|02|00|
+  12:48:44.473215 Sent 0x|11:00|49:00|80|00:00|AE:00:02:3B:0F:81:3C:0F:01:A6:00:02|
+  12:48:44.673718 Sent 0x|09:00|4A:00|00|01:00|A9:00:02:60|
+  12:48:44.773517 Recv 0x|04:00|4A:00|02|01|
+  12:48:44.874162 Sent 0x|09:00|4C:00|00|01:00|A9:00:02:60|
+  12:48:44.950694 Recv 0x|04:00|4C:00|02|01|
+  12:48:45.074450 Sent 0x|09:00|4D:00|00|01:00|A9:00:02:60|
+  12:48:45.124658 Recv 0x|04:00|4D:00|02|01|
+  12:48:45.274793 Sent 0x|09:00|4E:00|00|01:00|A9:00:02:60|
+  12:48:45.322584 Recv 0x|04:00|4E:00|02|01|
+  12:48:45.475099 Sent 0x|09:00|51:00|00|01:00|A9:00:02:60|
+  12:48:45.528592 Recv 0x|04:00|51:00|02|01|
+  12:48:45.675549 Sent 0x|09:00|52:00|00|01:00|A9:00:02:60|
+  12:48:45.732762 Recv 0x|04:00|52:00|02|00|
+  12:48:45.733656 Sent 0x|11:00|53:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:48:45.934072 Sent 0x|09:00|54:00|00|01:00|A9:00:02:60|
+  12:48:45.985610 Recv 0x|04:00|54:00|02|01|
+  12:48:46.134651 Sent 0x|09:00|56:00|00|01:00|A9:00:02:60|
+  12:48:46.183608 Recv 0x|04:00|56:00|02|01|
+  12:48:46.334950 Sent 0x|09:00|57:00|00|01:00|A9:00:02:60|
+  12:48:46.399693 Recv 0x|04:00|57:00|02|01|
+  12:48:46.535293 Sent 0x|09:00|58:00|00|01:00|A9:00:02:60|
+  12:48:46.579582 Recv 0x|04:00|58:00|02|01|
+  12:48:46.735896 Sent 0x|09:00|5A:00|00|01:00|A9:00:02:60|
+  12:48:46.788654 Recv 0x|04:00|5A:00|02|01|
+  12:48:46.936190 Sent 0x|09:00|5B:00|00|01:00|A9:00:02:60|
+  12:48:46.992702 Recv 0x|04:00|5B:00|02|00|
+  12:48:46.993371 Sent 0x|11:00|5C:00|80|00:00|AE:00:02:3B:0F:81:3C:0F:01:A6:00:02|
+  12:48:47.193783 Sent 0x|09:00|5D:00|00|01:00|A9:00:02:60|
+  12:48:47.263712 Recv 0x|04:00|5D:00|02|01|
+  12:48:47.394209 Sent 0x|09:00|5E:00|00|01:00|A9:00:02:60|
+  12:48:47.439528 Recv 0x|04:00|5E:00|02|01|
+  12:48:47.594571 Sent 0x|09:00|5F:00|00|01:00|A9:00:02:60|
+  12:48:47.652589 Recv 0x|04:00|5F:00|02|01|
+  12:48:47.794863 Sent 0x|09:00|62:00|00|01:00|A9:00:02:60|
+  12:48:47.874742 Recv 0x|04:00|62:00|02|01|
+  12:48:47.995327 Sent 0x|09:00|63:00|00|01:00|A9:00:02:60|
+  12:48:48.067742 Recv 0x|04:00|63:00|02|01|
+  12:48:48.195556 Sent 0x|09:00|64:00|00|01:00|A9:00:02:60|
+  12:48:48.242525 Recv 0x|04:00|64:00|02|00|
+  12:48:48.243357 Sent 0x|11:00|65:00|80|00:00|AE:00:02:05:0F:81:3C:0F:01:A6:00:02|
+  12:48:48.443723 Sent 0x|09:00|67:00|00|01:00|A9:00:02:60|
+  12:48:48.498720 Recv 0x|04:00|67:00|02|01|
+  12:48:48.578092 Sent 0x|09:00|6A:00|80|00:00|A3:00:02:00|
+    
+Some remarks:
+
+  - Until the interruption, the direct commands were the same as
+    before.
+  - The stopping occured during the seventh movement.
+  - The last direct command stopped the motor. This is what
+    *t_forwards.action_stop = stop* meant.
+
+    
+Moving a motor to a Specified Position
+......................................
+
+Connect your EV3 medium motor with port B, connect your computer and
+your EV3 brick with an USB cable, replace the MAC-address with the one of your
+EV3 brick, then run this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  import struct
+  from math import copysign
+  
+  
+  my_ev3 = ev3.EV3(
+      protocol=ev3.USB,
+      host='00:16:53:42:2B:99'
+  )
+  my_ev3.verbosity = 1
+  
+  speed = 10
+  to_position = 90
+  port = ev3.PORT_B
+  brake = 0
+  
+  ops1 = b''.join((
+      ev3.opInput_Device,
+      ev3.READY_SI,
+      ev3.LCX(0),  # LAYER
+      ev3.port_motor_input(port),  # NO
+      ev3.LCX(8),  # TYPE (EV3-Medium-Motor)
+      ev3.LCX(0),  # MODE (Degree)
+      ev3.LCX(1),  # VALUES
+      ev3.GVX(0)  # VALUE1
+  ))
+  reply = my_ev3.send_direct_cmd(ops1, global_mem=4)
+  from_position = struct.unpack('<f', reply)[0]
+  
+  diff = to_position - round(from_position)
+  speed *= round(copysign(1, diff))
+  steps = abs(diff)
+  
+  ops2 = b''.join((
+      ev3.opOutput_Reset,
+      ev3.LCX(0),  # LAYER
+      ev3.LCX(port),  # NOS
+      
+      ev3.opOutput_Step_Speed,
+      ev3.LCX(0),  # LAYER
+      ev3.LCX(port),  # NOS
+      ev3.LCX(speed),  # SPEED
+      ev3.LCX(0),  # STEP1
+      ev3.LCX(steps),  # STEP2
+      ev3.LCX(0),  # STEP3
+      ev3.LCX(brake),  # BRAKE - 1 (yes) or 0 (no)
+      
+      ev3.opOutput_Start,
+      ev3.LCX(0),  # LAYER
+      ev3.LCX(port)  # NOS
+  ))
+  my_ev3.send_direct_cmd(ops2)
+
+Please move the motor by hand and then run the program again. The
+motor will return to the defined position of 90 degrees. We use 4
+already known operations and it's obvious, that this algorithm can
+easily be encapsulated into a method of a motor class.
+
+The output:
+
+.. code-block:: none
+
+  13:19:05.149392 Sent 0x|0D:00|2A:00|00|04:00|99:1D:00:11:07:00:01:60|
+  13:19:05.155311 Recv 0x|07:00|2A:00|02|00:00:04:C2|
+  13:19:05.155969 Sent 0x|14:00|2B:00|00|00:00|A2:00:02:AE:00:02:0A:00:81:7B:00:00:A6:00:02|
+  13:19:05.161331 Recv 0x|03:00|2B:00|02|
+  
+
+
+Direct Commands are Machine Code Programs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+There are operations for calculations and much more. Direct commands
+are little machine code programs. Let's write a single direct command,
+that does the same thing.
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  
+  my_ev3 = ev3.EV3(
+      protocol=ev3.USB,
+      host='00:16:53:42:2B:99'
+  )
+  my_ev3.verbosity = 1
+  
+  speed = 10
+  to_position = 90
+  port = ev3.PORT_B
+  brake = 0
+  
+  ops = b''.join((
+      ev3.opInput_Device,
+      ev3.READY_SI,
+      ev3.LCX(0),  # LAYER
+      ev3.port_motor_input(port),  # NO
+      ev3.LCX(8),  # TYPE (EV3-Medium-Motor)
+      ev3.LCX(0),  # MODE (Degree)
+      ev3.LCX(1),  # VALUES
+      ev3.LVX(0),  # VALUE1 - from_position (DATAF)
+  
+      ev3.opMove32_F,
+      ev3.LCX(to_position),  # SOURCE
+      ev3.LVX(4),  # DESTINATION - to_position (DATAF)
+      
+      ev3.opSubF,
+      ev3.LVX(4),  # SOURCE1 - to_position (DATAF)
+      ev3.LVX(0),  # SOURCE2 - from_position (DATAF)
+      ev3.LVX(0),  # DESTINATION - diff (DATAF)
+      
+      ev3.opMath,
+      ev3.ABS,  # CMD
+      ev3.LVX(0),  # DATA X - diff (DATAF)
+      ev3.LVX(4),  # RESULT - abs(diff) (DATAF)
+      
+      ev3.opDivF,
+      ev3.LVX(0),  # SOURCE1 - diff (DATAF)
+      ev3.LVX(4),  # SOURCE2 - abs(diff) (DATAF)
+      ev3.LVX(0),  # DESTINATION - sign of diff (DATAF)
+      
+      ev3.opMove32_F,
+      ev3.LCX(speed),  # SOURCE
+      ev3.LVX(8),  # DESTINATION - speed (DATAF)
+      
+      ev3.opMulF,
+      ev3.LVX(0),  # SOURCE1 - sign of diff (DATAF)
+      ev3.LVX(8),  # SOURCE2 - speed (DATAF)
+      ev3.LVX(0),  # DESTINATION - signed_speed (DATAF)
+      
+      ev3.opMoveF_32,
+      ev3.LVX(4),  # SOURCE - abs(diff) (DATAF)
+      ev3.LVX(4),  # DESTINATION - abs(diff) (DATA32)
+      
+      ev3.opMoveF_8,
+      ev3.LVX(0),  # SOURCE - signed_speed (DATAF)
+      ev3.LVX(0),  # DESTINATION - signed_speed (DATA8)
+      
+      ev3.opOutput_Reset,
+      ev3.LCX(0),  # LAYER
+      ev3.LCX(port),  # NOS
+      
+      ev3.opOutput_Step_Speed,
+      ev3.LCX(0),  # LAYER
+      ev3.LCX(port),  # NOS
+      ev3.LVX(0),  # SPEED - signed_speed (DATA8)
+      ev3.LCX(0),  # STEP1
+      ev3.LVX(4),  # STEP2 - abs(diff) (DATA32)
+      ev3.LCX(0),  # STEP3
+      ev3.LCX(brake),  # BRAKE - 1 (yes) or 0 (no)
+      
+      ev3.opOutput_Start,
+      ev3.LCX(0),  # LAYER
+      ev3.LCX(port)  # NOS
+  ))
+  my_ev3.send_direct_cmd(ops, local_mem=12)
+
+Some remarks:
+
+  - This direct command allocates 12 bytes of local memory for its
+    intermediate results. Most of these are 4-bytes-numbers, therefore
+    the referenced addresses are LVX(0), LVX(4) and LVX(8).
+    
+  - We need to be carefull with the data formats, here we use numbers
+    in three formats:
+    
+    - *DATA8* (1 byte integer),
+    - *DATA32* (4 bytes integer) and
+    - *DATAF* (4 bytes floating point).
+      
+  - We have to translate some of the formats:
+
+    - *opMove32_F* translates a 4 bytes integer into a floating point
+      number,
+    - *opMoveF_32* does the opposite,
+    - *opMoveF_8* translates a floating point number into a 1 byte
+      integer.
+    
+  - We do the calculations with floating point numbers and use:
+
+    - *opDivF* for division,
+    - *opMulF* for multiplication and
+    - *opMath* with CMD *ABS* to get the absolute value of a floating point number.
+      
+That's machine code, welcome to the sixties! Think a minute about
+coding complex algorithms this way and realize what the apollo program
+meant for the software developers in these times. But keep in mind,
+coding machine code is great for performance. Here the communication
+is reduced from 2 direct commands to one. In case of protocol *USB*,
+this means some 0.05 sec.
+            

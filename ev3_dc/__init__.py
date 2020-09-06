@@ -23,4 +23,5 @@ from .sound import (
     FRERE_JACQUES
 )
 from .file import FileSystem
+from .motor import Motor
 from .exceptions import DirCmdError, SysCmdError

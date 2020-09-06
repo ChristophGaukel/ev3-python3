@@ -65,6 +65,17 @@ replies.
 
 .. autoclass:: ev3_dc.EV3
    :members:
+      
+
+Motor
+~~~~~
+
+Motor is a subclass of EV3 and provides higher order methods for motor
+movements.
+
+.. autoclass:: ev3_dc.Motor
+   :members:
+
 
 
 Jukebox

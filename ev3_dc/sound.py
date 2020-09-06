@@ -247,9 +247,6 @@ class Jukebox(EV3):
         super().__init__(protocol=protocol, host=host, ev3_obj=ev3_obj)
         self._volume = 1
         self._temperament = 440
-        self._pos_color = None
-        self._pos_tone = None
-        self._pos_led = None
 
     @property
     def volume(self):

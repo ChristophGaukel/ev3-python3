@@ -17,6 +17,7 @@ from .constants import (
     CONTINUE_DOWNLOAD,
     BEGIN_UPLOAD,
     CONTINUE_UPLOAD,
+    SYSTEM_REPLY_OK,
     SYSTEM_END_OF_FILE,
     LIST_FILES,
     CONTINUE_LIST_FILES,
@@ -32,57 +33,88 @@ from .exceptions import SysCmdError, DirCmdError
 
 class FileSystem(EV3):
     """
-    Works with EV3's filesystem
+    Access to EV3's filesystem
     """
 
     def write_file(self, path: str, data: bytes) -> None:
         """
-        Write data into a file of EV3's file system
+        Create a file in EV3's file system and write data into it
 
-        Positional Arguments:
-          path:
+        Positional Arguments
+
+          path
             absolute or relative path (from "/home/root/lms2012/sys/")
             of the file
-          data:
+          data
             data to write into the file
         """
+        assert isinstance(path, str), \
+            'path needs to be of type str'
+        assert isinstance(data, bytes), \
+            "data needs to be of type bytes"
+
         size = len(data)
-        cmd = b''.join([
+        cmd = b''.join((
             BEGIN_DOWNLOAD,
             struct.pack('<I', size),      # SIZE
             str.encode(path) + b'\x00'    # NAME
-        ])
+        ))
         reply = self.send_system_cmd(cmd)
-        handle = struct.unpack('B', reply[1])[0]
+        rc, handle = struct.unpack('sB', reply)
         rest = size
+        if rc != SYSTEM_REPLY_OK:
+            raise SysCmdError(
+                "error " +
+                '{:02X}'.format(rc) +
+                " when writing file " +
+                path
+            )
         while rest > 0:
             part_size = min(1017, rest)
             pos = size - rest
             fmt = 'B' + str(part_size) + 's'
-            cmd = b''.join([
+            cmd = b''.join((
                 CONTINUE_DOWNLOAD,
                 struct.pack(
                     fmt,
                     handle,
                     data[pos:pos+part_size]
                 )
-            ])
-            self.send_system_cmd(cmd)
+            ))
+            reply = self.send_system_cmd(cmd)
+            rc, handle = struct.unpack('sB', reply)
             rest -= part_size
+            if rest > 0 and rc != SYSTEM_REPLY_OK:
+                raise SysCmdError(
+                    "error " +
+                    '{:02X}'.format(rc) +
+                    " when writing file " +
+                    path
+                )
+            if rest <= 0 and rc != SYSTEM_END_OF_FILE:
+                raise SysCmdError(
+                    "end of file " +
+                    path +
+                    " not reached"
+                )
 
     def read_file(self, path: str) -> bytes:
         """
         Read one of EV3's files
 
-        Positional Arguments:
-          path:
+        Positional Arguments
+
+          path
             absolute or relative path to file (f.i. "/bin/sh")
         """
-        cmd = b''.join([
+        assert isinstance(path, str), \
+            'path needs to be of type str'
+
+        cmd = b''.join((
             BEGIN_UPLOAD,
             struct.pack('<H', 1012),      # SIZE
             str.encode(path) + b'\x00'    # NAME
-        ])
+        ))
         reply = self.send_system_cmd(cmd)
         size, handle = struct.unpack(
             '<IB',
@@ -100,79 +132,105 @@ class FileSystem(EV3):
         rest = size - part_size
         while rest > 0:
             part_size = min(1016, rest)
-            cmd = b''.join([
+            cmd = b''.join((
                 CONTINUE_UPLOAD,
                 struct.pack('<BH', handle, part_size)  # HANDLE, SIZE
-            ])
-            handle, part = struct.unpack(
-                'B' + str(part_size) + 's',
-                self.send_system_cmd(cmd)[1:]
+            ))
+            rc, handle, part = struct.unpack(
+                'sB' + str(part_size) + 's',
+                self.send_system_cmd(cmd)
             )
             data += part
             rest -= part_size
-            if rest <= 0 and reply[0] != SYSTEM_END_OF_FILE:
-                raise SysCmdError("end of file not reached")
+            if rest > 0 and rc != SYSTEM_REPLY_OK:
+                raise SysCmdError(
+                    "error " +
+                    '{:02X}'.format(rc) +
+                    " when reading file " +
+                    path
+                )
+            if rest <= 0 and rc != SYSTEM_END_OF_FILE:
+                raise SysCmdError(
+                    "end of file " +
+                    path +
+                    " not reached"
+                )
         return data
 
     def del_file(self, path: str) -> None:
         """
-        Delete a file from the EV3's file system
+        Delete a file in EV3's file system
 
-        Positional Arguments:
-          path:
+        Positional Arguments
+
+          path
             absolute or relative path (from "/home/root/lms2012/sys/")
             of the file
         """
-        cmd = b''.join([
+        assert isinstance(path, str), \
+            'path needs to be of type str'
+
+        cmd = b''.join((
             DELETE_FILE,
             str.encode(path) + b'\x00'    # NAME
-        ])
+        ))
         self.send_system_cmd(cmd)
 
     def copy_file(self, path_source: str, path_dest: str) -> None:
         """
-        Copies a file in the EV3's file system from
+        Copies a file in EV3's file system from
         its old location to a new one
         (no error if the file doesn't exist)
 
-        Positional Arguments:
-          path_source:
+        Positional Arguments
+
+          path_source
             absolute or relative path (from "/home/root/lms2012/sys/")
             of the existing file
-          path_dest:
+          path_dest
             absolute or relative path of the new file
         """
-        ops = b''.join([
+        assert isinstance(path_source, str), \
+            'path_source needs to be of type str'
+        assert isinstance(path_dest, str), \
+            'path_dest needs to be of type str'
+
+        ops = b''.join((
             opFile,
             MOVE,
             LCS(path_source),  # SOURCE
             LCS(path_dest)  # DESTINATION
-        ])
+        ))
         self.send_direct_cmd(
             ops,
-            global_mem=1,
             sync_mode=SYNC
         )
 
     def list_dir(self, path: str) -> dict:
         """
-        Read one of EV3's directories
+        Read one EV3 directory's content
 
         Positional Arguments
-          path:
-            absolute or relative path to the directory (f.i. "/bin")
+
+          path
+            absolute or relative path (from "/home/root/lms2012/sys/")
+            to the directory (f.i. "/bin")
 
         Returns
+
           subfolders
             tuple of strings (names)
           files
             tuple of tuples (name:str, size:int, md5:str)
         """
-        cmd = b''.join([
+        assert isinstance(path, str), \
+            'path needs to be of type str'
+
+        cmd = b''.join((
             LIST_FILES,
             struct.pack('<H', 1012),  # SIZE
             str.encode(path) + b'\x00'  # NAME
-        ])
+        ))
         reply = self.send_system_cmd(cmd)
         size, handle = struct.unpack('<IB', reply[1:6])
         part_size = min(1012, size)
@@ -184,18 +242,29 @@ class FileSystem(EV3):
         rest = size - part_size
         while rest > 0:
             part_size = min(1016, rest)
-            cmd = b''.join([
+            cmd = b''.join((
                 CONTINUE_LIST_FILES,
                 struct.pack('<BH', handle, part_size)  # HANDLE, SIZE
-            ])
-            handle, part = struct.unpack(
-                'B' + str(part_size) + 's',
-                self.send_system_cmd(cmd)[1:]
+            ))
+            rc, handle, part = struct.unpack(
+                'sB' + str(part_size) + 's',
+                self.send_system_cmd(cmd)
             )
             data += part
             rest -= part_size
-            if rest <= 0 and reply[6:7] != SYSTEM_END_OF_FILE:
-                raise SysCmdError("did not reach end of file")
+            if rest > 0 and rc != SYSTEM_REPLY_OK:
+                raise SysCmdError(
+                    "error " +
+                    '{:02X}'.format(rc) +
+                    " when reading folder " +
+                    path
+                )
+            if rest <= 0 and rc != SYSTEM_END_OF_FILE:
+                raise SysCmdError(
+                    "end of folder-data " +
+                    path +
+                    " not reached"
+                )
         folders = []
         files = []
         for line in data.split(sep=b'\x0A'):
@@ -204,41 +273,52 @@ class FileSystem(EV3):
             elif line.endswith(b'\x2F'):
                 folders.append(line.rstrip(b'\x2F').decode("utf8"))
             else:
-                (md5, size_hex, name) = line.split(None, 2)
+                md5, size_hex, name = line.split(None, 2)
                 size = int(size_hex, 16)
-                files.append(
+                files.append((
                     name.decode("utf8"),
                     size,
                     md5.decode("utf8")
-                )
+                ))
         return tuple(folders), tuple(files)
 
     def create_dir(self, path: str) -> None:
         """
-        Create a directory on EV3's file system
+        Create a directory in EV3's file system
 
-        Positional Arguments:
-          path:
+        Positional Arguments
+
+          path
             absolute or relative path (from "/home/root/lms2012/sys/")
         """
-        cmd = b''.join([
+        assert isinstance(path, str), \
+            'path needs to be of type str'
+
+        cmd = b''.join((
             CREATE_DIR,
             str.encode(path) + b'\x00'  # NAME
-        ])
+        ))
         self.send_system_cmd(cmd)
 
-    def del_dir(self, path: str, secure: bool=True) -> None:
+    def del_dir(self, path: str, secure: bool = True) -> None:
         """
-        Delete a directory on EV3's file system
+        Delete a directory in EV3's file system
 
-        Positional Arguments:
-          path:
+        Positional Arguments
+
+          path
             absolute or relative path (from "/home/root/lms2012/sys/")
 
-        Optional Arguments:
-          secure:
-            flag, if the directory may be not empty
+        Optional Arguments
+
+          secure
+            flag, if the directory must be empty
         """
+        assert isinstance(path, str), \
+            'path needs to be of type str'
+        assert isinstance(secure, bool), \
+            "secure needs to be of type bool"
+
         if secure:
             self.del_file(path)
         else:
@@ -246,12 +326,12 @@ class FileSystem(EV3):
                 path = path[:-1]
             parent_path = path.rsplit("/", 1)[0] + "/"
             folder = path.rsplit("/", 1)[1]
-            ops = b''.join([
+            ops = b''.join((
                 opFile,
                 GET_FOLDERS,
                 LCS(parent_path),
                 GVX(0)
-            ])
+            ))
             num = struct.unpack(
                 'B',
                 self.send_direct_cmd(
@@ -262,14 +342,14 @@ class FileSystem(EV3):
             )[0]
             found = False
             for i in range(num):
-                ops = b''.join([
+                ops = b''.join((
                     opFile,
                     GET_SUBFOLDER_NAME,
                     LCS(parent_path),
                     LCX(i + 1),  # ITEM
                     LCX(64),  # LENGTH
                     GVX(0)  # NAME
-                ])
+                ))
                 subdir = struct.unpack(
                     '64s',
                     self.send_direct_cmd(
@@ -280,12 +360,12 @@ class FileSystem(EV3):
                 )[0].split(b'\x00')[0].decode("utf8")
                 if subdir == folder:
                     found = True
-                    ops = b''.join([
+                    ops = b''.join((
                         opFile,
                         DEL_SUBFOLDER,
                         LCS(parent_path),  # NAME
                         LCX(i + 1)  # ITEM
-                    ])
+                    ))
                     self.send_direct_cmd(
                         ops,
                         sync_mode=SYNC

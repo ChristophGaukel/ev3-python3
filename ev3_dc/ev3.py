@@ -41,6 +41,8 @@ class PhysicalEV3:
         protocol: str,
         host: str,
     ):
+        assert isinstance(protocol, str), \
+            'protocol needs to be of type str'
         assert protocol in (BLUETOOTH, WIFI, USB), \
             'Protocol ' + protocol + 'is not valid'
         assert isinstance(host, str), \
@@ -75,7 +77,7 @@ class PhysicalEV3:
         '''
         determines next message counter
         '''
-        if self._msg_cnt < 32767:
+        if self._msg_cnt < 65535:
             self._msg_cnt += 1
         else:
             self._msg_cnt = 1
@@ -124,7 +126,7 @@ class PhysicalEV3:
             r'^Serial-Number: (\w*)\s\n' +
             r'Port: (\d{4,4})\s\n' +
             r'Name: (\w+)\s\n' +
-            r'Protocol: (\w+)$',
+            r'Protocol: (\w+)',
             data.decode('utf-8')
         )
         serial_number = matcher.group(1)
@@ -173,10 +175,12 @@ class PhysicalEV3:
             idVendor=_ID_VENDOR_LEGO,
             idProduct=_ID_PRODUCT_EV3
         )
+
+        # identify EV3 device
         for dev in ev3_devices:
             if self._device:
                 raise ValueError(
-                    'found multiple ev3 but no argument host was set'
+                    'found multiple EV3 but argument host was not set'
                 )
             if self._host:
                 mac_addr = usb.util.get_string(dev, dev.iSerialNumber)
@@ -187,8 +191,14 @@ class PhysicalEV3:
                 self._device = dev
         if not self._device:
             raise RuntimeError("Lego EV3 not found")
-        if self._device.is_kernel_driver_active(0) is True:
-            self._device.detach_kernel_driver(0)
+
+        # handle interfaces
+        for i in self._device.configurations()[0].interfaces():
+            try:
+                if self._device.is_kernel_driver_active(i.index):
+                    self._device.detach_kernel_driver(i.index)
+            except NotImplementedError:
+                pass
         self._device.set_configuration()
 
         # initial read
@@ -211,7 +221,8 @@ class EV3:
         """
         Establish a connection to a LEGO EV3 device
 
-        Keyword Arguments (either protocol and host or ev3_obj):
+        Keyword Arguments (either protocol and host or ev3_obj)
+
           protocol
             'Bluetooth', 'Usb' or 'Wifi'
           host
@@ -219,14 +230,14 @@ class EV3:
           ev3_obj
             existing EV3 object (its connections will be used)
           sync mode (standard, asynchronous, synchronous)
-            STD
-              Use DIRECT_COMMAND_REPLY if global_mem > 0,
-              then wait for reply.
-            ASYNC
-              Use DIRECT_COMMAND_REPLY if global_mem > 0,
-              never wait for reply (it's the task of the calling program).
-            SYNC
-              Always use DIRECT_COMMAND_REPLY and wait for reply.
+            STD - if reply then use DIRECT_COMMAND_REPLY and
+            wait for reply.
+
+            ASYNC - if reply then use DIRECT_COMMAND_REPLY,
+            but never wait for reply (it's the task of the calling program).
+
+            SYNC - Always use DIRECT_COMMAND_REPLY and wait for reply,
+            which may be empty.
           verbosity
             level (0, 1, 2) of verbosity (prints on stdout).
         """
@@ -261,25 +272,25 @@ class EV3:
         sync mode (standard, asynchronous, synchronous)
 
         STD
-          use DIRECT_COMMAND_REPLY if global_mem > 0,
+          use DIRECT_COMMAND_REPLY only if global_mem > 0,
           wait for reply if there is one.
         ASYNC
-          use DIRECT_COMMAND_REPLY if global_mem > 0,
+          use DIRECT_COMMAND_REPLY only if global_mem > 0,
           never wait for reply (it's the task of the calling program).
         SYNC
           always use DIRECT_COMMAND_REPLY and wait for reply.
 
-        The idea is:
-          ASYNC
-            Interruption or EV3 device queues direct commands,
-            control directly comes back.
-          SYNC
-            EV3 device is blocked until direct command is finished,
-            control comes back, when direct command is finished.
-          STD
-            NO_REPLY like ASYNC with interruption or EV3 queuing,
+        The idea is
 
-            REPLY like SYNC, synchronicity of program and EV3 device.
+          ASYNC - if there is a reply, it must explicitly be asked for.
+          Control directly comes back.
+
+          SYNC - EV3 device is blocked until direct command is finished
+          control comes back, when direct command is finished, which is
+          synchronicity of program and EV3 device.
+
+          STD - direct commands with no reply are handled like ASYNC,
+          direct commands with reply are handled like SYNC.
         """
 
         return self._sync_mode
@@ -319,8 +330,10 @@ class EV3:
         Send a direct command to the LEGO EV3
 
         Positional Arguments
+
           ops
             holds netto data only (operations), these fields are added:
+
               length: 2 bytes, little endian
 
               msg_cnt: 2 bytes, little endian
@@ -330,6 +343,7 @@ class EV3:
               header: 2 bytes, holds sizes of local and global memory
 
         Keyword Arguments
+
           local_mem
             size of the local memory
           global_mem
@@ -340,11 +354,12 @@ class EV3:
             level (0, 1, 2) of verbosity (prints on stdout).
 
         Returns
-          if sync_mode is STD
-            reply (if global_mem > 0) or message counter
-          if sync_mode is ASYNC
+
+          STD (sync_mode)
+            if global_mem > 0 then reply else message counter
+          ASYNC (sync_mode)
             message counter
-          if sync_mode is SYNC
+          SYNC (sync_mode)
             reply of the LEGO EV3
         """
         assert isinstance(ops, bytes), \
@@ -386,9 +401,9 @@ class EV3:
         msg_cnt = self._physical_ev3.next_msg_cnt()
 
         cmd = b''.join((
-            struct.pack('<hh', len(ops) + 5, msg_cnt),
+            struct.pack('<HH', len(ops) + 5, msg_cnt),
             cmd_type,
-            struct.pack('<h', local_mem * 1024 + global_mem),
+            struct.pack('<H', local_mem * 1024 + global_mem),
             ops
         ))
 
@@ -436,14 +451,17 @@ class EV3:
         Ask the LEGO EV3 for a reply and wait until it is received
 
         Positional Arguments
+
           msg_cnt
             is the message counter of the corresponding send_direct_cmd
 
         Keyword Arguments
+
           verbosity
             level (0, 1, 2) of verbosity (prints on stdout).
 
         Returns
+
           reply to the direct command (without len, msg_cnt and return status)
         """
         assert isinstance(msg_cnt, bytes), \
@@ -528,8 +546,10 @@ class EV3:
         Send a system command to the LEGO EV3
 
         Positional Arguments
+
           cmd
             holds netto data only (cmd and arguments), these fields are added:
+
               length: 2 bytes, little endian
 
               msg_cnt: 2 bytes, little endian
@@ -537,12 +557,14 @@ class EV3:
               type: 1 byte, SYSTEM_COMMAND_REPLY or SYSTEM_COMMAND_NO_REPLY
 
         Keyword Arguments
+
           reply
             flag if with reply
           verbosity
             level (0, 1, 2) of verbosity (prints on stdout).
 
         Returns
+
           reply (in case of SYSTEM_COMMAND_NO_REPLY: msg_cnt)
         """
         assert isinstance(cmd, bytes), \
@@ -561,11 +583,11 @@ class EV3:
         else:
             cmd_type = _SYSTEM_COMMAND_NO_REPLY
         msg_cnt = self._physical_ev3.next_msg_cnt()
-        cmd = b''.join([
+        cmd = b''.join((
             struct.pack('<hh', len(cmd) + 3, msg_cnt),
             cmd_type,
             cmd
-        ])
+        ))
         if self._verbosity >= 1:
             print(
                 datetime.now().strftime('%H:%M:%S.%f') +
@@ -601,10 +623,12 @@ class EV3:
         Ask the LEGO EV3 for a system command reply and wait until received
 
         Positional Arguments
+
           msg_cnt
             is the message counter of the corresponding send_system_cmd
 
         Returns
+
           reply to the system command
         """
         assert isinstance(msg_cnt, bytes), \
