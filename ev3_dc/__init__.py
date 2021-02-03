@@ -13,7 +13,10 @@ from .functions import (
 )
 from .constants import *
 from .ev3 import EV3
-from .vehicle import TwoWheelVehicle
+
+# subclasses of EV3
+from .file import FileSystem
+from .motor import Motor
 from .sound import (
     Jukebox,
     TRIAD,
@@ -22,6 +25,9 @@ from .sound import (
     EU_ANTEMN,
     FRERE_JACQUES
 )
-from .file import FileSystem
-from .motor import Motor
+from .touch import Touch
+from .infrared import Infrared
+from .ultrasonic import Ultrasonic
+from .vehicle import TwoWheelVehicle
+
 from .exceptions import DirCmdError, SysCmdError

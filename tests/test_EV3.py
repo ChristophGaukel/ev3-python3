@@ -6,7 +6,7 @@ import pytest
 import re
 
 my_ev3 = ev3.EV3(
-    protocol=ev3.BLUETOOTH,
+    protocol=ev3.WIFI,
     host='00:16:53:42:2B:99',
     sync_mode=ev3.SYNC,
     verbosity=1
@@ -27,7 +27,7 @@ def test_opNop(capsys):
             verbosity=0
         )
     )
-    assert reply == '03:00:2A:00:02'
+    assert reply == ''
     captured = capsys.readouterr()
     assert captured.err == ''
     assert captured.out == ''
@@ -40,7 +40,7 @@ def test_opNop(capsys):
             byte
         ) for byte in my_ev3.send_direct_cmd(ops)
     )
-    assert reply == '03:00:2B:00:02'
+    assert reply == ''
     captured = capsys.readouterr()
     assert captured.err == ''
     assert re.sub(
@@ -99,8 +99,8 @@ def test_opNop(capsys):
             verbosity=0
         )
     )
-    assert reply.startswith('04:00:2E:00:02:')
-    assert len(reply) == 17
+    # assert reply.startswith('04:00:2E:00:02:')
+    assert len(reply) == 2
     captured = capsys.readouterr()
     assert captured.err == ''
     assert captured.out == ''
@@ -119,7 +119,7 @@ def test_opNop(capsys):
 
     msg_cnt_2 = my_ev3.send_direct_cmd(
         ops,
-        global_mem=1
+        global_mem=2
     )
     assert ':'.join('{:02X}'.format(byte) for byte in msg_cnt_2) == '30:00'
     captured = capsys.readouterr()
@@ -131,8 +131,11 @@ def test_opNop(capsys):
     assert captured.err == ''
     assert captured.out == ''
     reply_2_str = ':'.join('{:02X}'.format(byte) for byte in reply_2)
-    assert reply_2_str.startswith('04:00:30:00:02:')
-    assert len(reply_2_str) == 17
+    assert len(reply_2_str) == 5
+
+    # msg_1 must be in the reply buffer
+    assert msg_cnt_1 in my_ev3._physical_ev3._reply_buffer
+    assert msg_cnt_1 == my_ev3._physical_ev3._reply_buffer[msg_cnt_1][2:4]
 
     my_ev3.verbosity = 1
     reply_1 = my_ev3.wait_for_reply(msg_cnt_1, verbosity=0)
@@ -140,8 +143,7 @@ def test_opNop(capsys):
     assert captured.err == ''
     assert captured.out == ''
     reply_1_str = ':'.join('{:02X}'.format(byte) for byte in reply_1)
-    assert reply_1_str.startswith('04:00:2F:00:02:')
-    assert len(reply_1_str) == 17
+    assert len(reply_1_str) == 2
 
 
 def test_opError():
@@ -167,7 +169,7 @@ def test_brickname():
     reply = my_ev3.send_direct_cmd(ops_get, global_mem=32)
     name_orig = struct.unpack(
         '32s',
-        reply[5:]
+        reply
     )[0].split(b'\x00')[0].decode("ascii")
 
     ops_set = b''.join((
@@ -180,7 +182,7 @@ def test_brickname():
     reply = my_ev3.send_direct_cmd(ops_get, global_mem=32)
     name_tmp = struct.unpack(
         '32s',
-        reply[5:]
+        reply
     )[0].split(b'\x00')[0].decode("ascii")
     assert name_tmp == 'Bernie'
 
@@ -196,6 +198,6 @@ def test_brickname():
     reply = my_ev3.wait_for_reply(msg_cnt)
     name = struct.unpack(
         '32s',
-        reply[5:]
+        reply
     )[0].split(b'\x00')[0].decode("ascii")
     assert name == name_orig

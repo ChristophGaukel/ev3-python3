@@ -15,9 +15,10 @@ Installation
 ::
 
   python3 -m pip install --user ev3_dc
-             
+
 Examples
 --------
+
 
 Writing and sending direct commands
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -28,10 +29,8 @@ and plays a tone with a frequency of 440 Hz for a duration of 1 sec.
 
 ::
 
-  #!/usr/bin/env python3
-  
   import ev3_dc as ev3
-  
+
   my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
   my_ev3.verbosity = 1
   ops = b''.join((
@@ -50,12 +49,9 @@ The output shows the direct command, which was sent to the EV3 device::
 Subclasses of EV3 with comfortable APIs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Class **Jukebox**  has a method **play_tone**,
-which also plays tones:
+Method **play_tone** of class **Jukebox** also plays tones:
 
 ::
-
-  #!/usr/bin/env python3
 
   import ev3_dc as ev3
 
@@ -64,11 +60,42 @@ which also plays tones:
   jukebox.play_tone("a'", duration=1)
 
 This program does the very same thing via bluetooth! Before you can
-run it, you need to pair the the two devices (the computer, that
+run it, you need to pair the two devices (the computer, that
 executes the program and the EV3 brick). The output::
 
   11:55:11.324701 Sent 0x|0E:00|2A:00|80|00:00|94:01:01:82:B8:01:82:E8:03|
 
-Read
-`ev3_dc.readthedocs.io <https://ev3_dc.readthedocs.io/en/latest/>`_
-for more details.
+
+Independent Tasks
+~~~~~~~~~~~~~~~~~
+
+Specialized classes (e.g. class **Jukebox**) provide factory methods,
+that return thread tasks. Thread tasks allow to start, stop and
+continue independent tasks.
+
+::
+
+  import ev3_dc as ev3
+
+  jukebox = ev3.Jukebox(protocol=ev3.WIFI, host='00:16:53:42:2B:99')
+  antemn = jukebox.song(ev3.EU_ANTEMN)
+
+  antemn.start()
+
+This program plays the EU antemn. Before you can execute it, you need
+to connect both devices (the computer, that runs the program and the
+EV3 brick) with the same LAN (local area network), the EV3 brick must
+be connected via wifi. If you don't own a wifi dongle, modify the
+protocol and select ev3.BLUETOOTH or ev3.USB.
+
+Some remarks:
+  - Method song() returns a `thread_task
+    <https://thread_task.readthedocs.io/en/latest/>`_ object, which
+    can be started, stopped and continued. It plays tones and changes
+    the LED-colors.
+  - Starting the thread task does not block the program nor does it
+    block the EV3 brick. It runs in the background and allows to do
+    additional things parallel.
+
+Read `ev3_dc.readthedocs.io
+<https://ev3_dc.readthedocs.io/en/latest/>`_ for more details.

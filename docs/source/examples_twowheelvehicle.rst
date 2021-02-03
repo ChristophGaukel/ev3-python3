@@ -1,6 +1,6 @@
-------------------
-Two Wheel Vehilcle
-------------------
+-----------------
+Two Wheel Vehicle
+-----------------
 
 .. role:: python(code)
    :language: python3

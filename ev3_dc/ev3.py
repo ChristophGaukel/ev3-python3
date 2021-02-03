@@ -28,8 +28,27 @@ from .constants import (
     USB,
     STD,
     ASYNC,
-    SYNC
+    SYNC,
+    
+    # name
+    opCom_Get,
+    opCom_Set,
+    GET_BRICKNAME,
+    SET_BRICKNAME,
+
+    # introspection
+    opInput_Device,
+    GET_TYPEMODE,
+    PORT_1,
+    PORT_2,
+    PORT_3,
+    PORT_4,
+    PORT_A_SENSOR,
+    PORT_B_SENSOR,
+    PORT_C_SENSOR,
+    PORT_D_SENSOR
 )
+from .functions import LCX, GVX, LCS
 
 
 class PhysicalEV3:
@@ -55,6 +74,8 @@ class PhysicalEV3:
         self._host = host
         self._device = None
         self._socket = None
+        self._name = None
+        self._sensors = None
 
         if protocol == BLUETOOTH:
             self._connect_bluetooth()
@@ -204,19 +225,86 @@ class PhysicalEV3:
         # initial read
         self._device.read(_EP_IN, 1024, 100)
 
+    def _introspection_dc(self, *, offset: int = 0) -> bytes:
+        """
+        direct command, that determines all connected sensors (incl. motors)
+
+        Keyword only Arguments
+
+          offset
+            offset (in bytes) of output data in global memory
+        """
+        assert isinstance(offset, int), 'data must be of type int'
+        assert offset >= 0, 'offset must be positive'
+        ports = (
+                PORT_1,
+                PORT_2,
+                PORT_3,
+                PORT_4,
+                PORT_A_SENSOR,
+                PORT_B_SENSOR,
+                PORT_C_SENSOR,
+                PORT_D_SENSOR
+        )
+        ops = b''
+        for i in range(8):
+            ops += b''.join((
+                opInput_Device,  # operation
+                GET_TYPEMODE,  # CMD
+                LCX(0),  # LAYER
+                ports[i],  # NO
+                GVX(offset + 2*i),  # TYPE (output)
+                GVX(offset + 2*i + 1)  # MODE (output)
+            ))
+        return ops
+
+
+    def _introspection_store(self, data: bytes) -> None:
+        """
+        stores information about all connected motors and sensors
+
+        Positional Arguments
+
+          data
+            output data with information about all connected motors and sensors
+        """
+        assert isinstance(data, bytes), 'data must be of type bytes'
+        assert len(data) == 16, 'data must be 16 bytes long'
+        ports = (
+                PORT_1,
+                PORT_2,
+                PORT_3,
+                PORT_4,
+                PORT_A_SENSOR,
+                PORT_B_SENSOR,
+                PORT_C_SENSOR,
+                PORT_D_SENSOR
+        )
+        self._sensors = {}
+        for i in range(8):
+            sensor_type, sensor_mode = struct.unpack(
+                '<BB',
+                data[2*i:2*i+2]
+            )
+            if sensor_type == 126:
+                self._sensors[ports[i]] = None
+            else:
+                self._sensors[ports[i]] = sensor_type
+
 
 class EV3:
     """
-    communicates with a LEGO EV3 using direct commands
+    communicates with a LEGO EV3 using direct or system commands
     """
 
     def __init__(
-        self,
-        protocol: str = None,
-        host: str = None,
-        ev3_obj: 'EV3' = None,
-        sync_mode: str = None,
-        verbosity=0
+            self,
+            *,
+            protocol: str = None,
+            host: str = None,
+            ev3_obj: 'EV3' = None,
+            sync_mode: str = None,
+            verbosity=0
     ):
         """
         Establish a connection to a LEGO EV3 device
@@ -226,7 +314,7 @@ class EV3:
           protocol
             'Bluetooth', 'Usb' or 'Wifi'
           host
-            MAC-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
+            MAC-address of the LEGO EV3 (e.g. '00:16:53:42:2B:99')
           ev3_obj
             existing EV3 object (its connections will be used)
           sync mode (standard, asynchronous, synchronous)
@@ -250,7 +338,7 @@ class EV3:
         else:
             self._physical_ev3 = PhysicalEV3(protocol, host)
 
-        assert isinstance(verbosity, Integral), \
+        assert isinstance(verbosity, int), \
             "verbosity needs to be of type int"
         assert verbosity >= 0 and verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
@@ -265,6 +353,15 @@ class EV3:
             self._sync_mode = SYNC
         else:
             self._sync_mode = STD
+        
+    def __str__(self):
+        """representation of the object in a str context"""
+        return ' '.join((
+                f'{self._physical_ev3._protocol}',
+                f'connected EV3 {self._physical_ev3._host}',
+                '(' + self.name + ')'
+
+        ))
 
     @property
     def sync_mode(self) -> str:
@@ -311,12 +408,47 @@ class EV3:
         return self._verbosity
 
     @verbosity.setter
-    def verbosity(self, value: Integral):
-        assert isinstance(value, Integral), \
+    def verbosity(self, value: int):
+        assert isinstance(value, int), \
             "verbosity needs to be of type int"
         assert value >= 0 and value <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
         self._verbosity = int(value)
+
+    @property
+    def name(self) -> str:
+        """
+        name of EV3 device
+        """
+        if self._physical_ev3._name is None:
+            reply = self.send_direct_cmd(
+                    b''.join((
+                        opCom_Get,
+                        GET_BRICKNAME,  # CMD
+                        LCX(32),  # LENGTH
+                        GVX(0)  # NAME (out)
+                    )),
+                    global_mem=32
+            )
+            self._physical_ev3._name = struct.unpack(
+                '32s',
+                reply
+            )[0].split(b'\x00')[0].decode("utf8")
+        return self._physical_ev3._name
+
+    @name.setter
+    def name(self, value: str):
+        assert isinstance(value, str), "name needs to be of type str"
+        assert value != '', "name may not be an empty string"
+        if value != self._physical_ev3._name:
+            self.send_direct_cmd(
+                    b''.join((
+                            opCom_Set,  # operation
+                            SET_BRICKNAME,  # CMD
+                            LCS(value)  # NAME
+                    ))
+            )
+            self._physical_ev3._name = value
 
     def send_direct_cmd(
         self,
@@ -474,14 +606,14 @@ class EV3:
             "allowed verbosity values are: 0, 1 or 2"
 
         if not _locked:
-            self._physical_ev3._reply_lock.acquire()
+            self._physical_ev3._lock.acquire()
 
         # reply already in buffer?
         reply = self._physical_ev3._reply_buffer.pop(msg_cnt, None)
         if reply is not None:
             self._physical_ev3._lock.release()
             if reply[4:5] == _DIRECT_REPLY:
-                return reply
+                return reply[5:]
             raise DirCmdError(
                 "direct command {:02X}:{:02X} replied error".format(
                     reply[2],

@@ -57,13 +57,41 @@ Classes
 -------
 
 EV3
-~~~~
+~~~
 
 EV3 establishes a connection between your computer and the EV3
 device. It allows to send direct and system commands and receive their
 replies.
 
 .. autoclass:: ev3_dc.EV3
+   :members:
+      
+
+Touch
+~~~~~
+
+Touch is a subclass of EV3 and allows to read data from a touch
+sensor, which may be an EV3-Touch or a NXT-Touch.
+
+.. autoclass:: ev3_dc.Touch
+   :members:
+      
+
+Infrared
+~~~~~~~~
+
+Infrared is a subclass of EV3 and allows to read data from an
+infrared sensor, which may be an EV3-Infrared or a NXT-Infrared. It
+uses three modes of the infrared sensor:
+
+  - *proximity* mode, which measures the distance between the
+    sensor an a surface in front of the sensor.
+  - *seeker* mode, which measures the position (heading and distance) of
+    up to four beacons.
+  - *remode* mode, which reads the currently pressed buttons of up to
+    four beacons.
+
+.. autoclass:: ev3_dc.Infrared
    :members:
       
 

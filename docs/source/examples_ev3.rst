@@ -725,10 +725,10 @@ The most important operation for reading data is:
 
 There are two siblings, that read data a bit different:
 
-  - *opInput_Device* = 0x|99| with CMD *READY_PCT* = 0x|1B| writes
+  - *opInput_Device* = 0x|99| with CMD *READY_PCT* = 0x|1B| reads
     integer data in the range [0 - 100], that must be interpreted as a
     percentage.
-  - *opInput_Device* = 0x|99| with CMD *READY_SI* = 0x|1D| writes floating point data.
+  - *opInput_Device* = 0x|99| with CMD *READY_SI* = 0x|1D| reads floating point data.
 
 Return data can be written to the local or global memory. Use function
 :py:func:`~ev3_dc.LVX` to address the local memory and
@@ -895,6 +895,8 @@ The output:
 lists the sensor types and modes of the EV3 device and helps to
 understand these numbers.
 
+.. _touch-mode-dc:
+
 Touch mode of the Touch Sensor
 ..............................
 
@@ -957,6 +959,8 @@ The output:
 0x|00:00:80:3F| is the little endian notation of the floating point
 number 1.0.
 
+.. _bump-mode-dc:
+
 Bump mode of the Touch Sensor
 ..............................
 
@@ -1006,9 +1010,9 @@ by BLUETOOTH.
   
   print()
   print(
-          'The sensor was',
+          'The sensor was touched',
           int(touched),
-          'times touched'
+          'times'
   )
 
 The output:
@@ -1022,7 +1026,7 @@ The output:
   09:37:09.418332 Sent 0x|0D:00|2B:00|00|04:00|99:1D:00:00:10:01:01:60|
   09:37:09.435870 Recv 0x|07:00|2B:00|02|00:00:40:41|
   
-  The sensor was 12 times touched
+  The sensor was touched 12 times
   
 If you compare the two direct commands, you will realize some differences:
 
