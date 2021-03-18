@@ -548,8 +548,9 @@ class _PhysicalEV3:
     def send_system_cmd(
         self,
         cmd: bytes,
-        reply: bool = True,
-        verbosity: int = None
+        *,
+        verbosity: int,
+        reply: bool = True
     ) -> bytes:
         """
         Send a system command to the LEGO EV3
@@ -567,7 +568,7 @@ class _PhysicalEV3:
             cmd_type,
             cmd
         ))
-        if self._verbosity >= 1:
+        if verbosity >= 1:
             print(
                 datetime.now().strftime('%H:%M:%S.%f') +
                 ' Sent 0x|' +
@@ -595,7 +596,8 @@ class _PhysicalEV3:
     def _wait_for_system_reply(
             self,
             msg_cnt: bytes,
-            verbosity: int = None,
+            *,
+            verbosity: int,
             _locked=False
     ) -> bytes:
         """
@@ -690,7 +692,7 @@ class EV3:
         """
         Establish a connection to a LEGO EV3 device
 
-        Keyword Arguments (either protocol and host or ev3_obj)
+        Keyword arguments (either protocol and host or ev3_obj)
 
           protocol
             'Bluetooth', 'USB' or 'WiFi'
@@ -1032,7 +1034,7 @@ class EV3:
         """
         Send a direct command to the LEGO EV3
 
-        Positional Arguments
+        Mandatory positional arguments
 
           ops
             holds netto data only (operations), these fields are added:
@@ -1045,7 +1047,7 @@ class EV3:
 
               header: 2 bytes, holds sizes of local and global memory
 
-        Keyword only Arguments
+        Optional keyword only arguments
 
           local_mem
             size of the local memory
@@ -1090,8 +1092,10 @@ class EV3:
         assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
             
-        sync_mode = sync_mode if sync_mode is not None else self._sync_mode
-        verbosity = verbosity if verbosity is not None else self._verbosity
+        if sync_mode is None:
+            sync_mode = self._sync_mode
+        if verbosity is None:
+            verbosity = self._verbosity
         return self._physical_ev3.send_direct_cmd(
                 ops,
                 local_mem=local_mem,
@@ -1109,12 +1113,12 @@ class EV3:
         """
         Ask the LEGO EV3 for a reply and wait until it is received
 
-        Positional Arguments
+        Mandatory positional arguments
 
           msg_cnt
             is the message counter of the corresponding send_direct_cmd
 
-        Keyword only Arguments
+        Optional keyword only arguments
 
           verbosity
             level (0, 1, 2) of verbosity (prints on stdout).
@@ -1132,7 +1136,8 @@ class EV3:
         assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
 
-        verbosity = verbosity if verbosity is not None else self._verbosity
+        if verbosity is None:
+            verbosity = self._verbosity
         return self._physical_ev3.wait_for_reply(
                 msg_cnt,
                 verbosity=verbosity
@@ -1148,7 +1153,7 @@ class EV3:
         """
         Send a system command to the LEGO EV3
 
-        Positional Arguments
+        Mandatory positional arguments
 
           cmd
             holds netto data only (cmd and arguments), these fields are added:
@@ -1159,7 +1164,7 @@ class EV3:
 
               type: 1 byte, SYSTEM_COMMAND_REPLY or SYSTEM_COMMAND_NO_REPLY
 
-        Keyword only Arguments
+        Optional keyword only arguments
 
           reply
             flag if with reply
@@ -1179,7 +1184,8 @@ class EV3:
         assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
 
-        verbosity = verbosity if verbosity is not None else self._verbosity
+        if verbosity is None:
+            verbosity = self._verbosity
         return self._physical_ev3.send_system_cmd(
                 cmd,
                 reply=reply,
@@ -1195,12 +1201,12 @@ class EV3:
         """
         Ask the LEGO EV3 for a system command reply and wait until received
 
-        Positional Arguments
+        Mandatory positional arguments
 
           msg_cnt
             is the message counter of the corresponding send_system_cmd
 
-        Keyword only Arguments
+        Optional keyword only arguments
 
           verbosity
             level (0, 1, 2) of verbosity (prints on stdout).
@@ -1218,7 +1224,8 @@ class EV3:
         assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
             
-        verbosity = verbosity if verbosity is not None else self._verbosity
+        if verbosity is None:
+            verbosity = self._verbosity
         return self._physical_ev3._wait_for_system_reply(
                 msg_cnt,
                 verbosity=verbosity

@@ -184,9 +184,11 @@ class Motor(EV3):
             self._delta_time = .1
         else:
             self._delta_time = .05
-        
+
     def __str__(self):
-        """description of the object in a str context"""
+        '''
+        description of the object in a str context
+        '''
         if self.sensors_as_dict[port_motor_input(self._port)] == EV3_LARGE_MOTOR:
             type_str = 'EV3_LARGE_MOTOR'
         else:

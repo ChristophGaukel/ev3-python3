@@ -6,7 +6,7 @@ LEGO Mindstorms EV3 direct commands - vehicle
 from math import pi, cos, sin, atan, radians, copysign, degrees, sqrt
 from struct import unpack
 from time import time
-from numbers import Number, Integral
+from numbers import Number
 from thread_task import Task, Repeated, Periodic
 from .ev3 import EV3
 from .constants import (
@@ -62,26 +62,27 @@ class TwoWheelVehicle(EV3):
             self,
             radius_wheel: float,
             tread: float,
+            *,
             protocol: str = None,
             host: str = None,
             ev3_obj: EV3 = None,
-            speed: Integral = 10,
+            speed: int = 10,
             delta_time: Number = None,
             port_left: bytes = PORT_A,
             port_right: bytes = PORT_D,
-            polarity_left: Integral = 1,
-            polarity_right: Integral = 1
+            polarity_left: int = 1,
+            polarity_right: int = 1
     ):
         """
         Establish a connection to a LEGO EV3 device
 
-        Positional Arguments
+        Mandatory positional arguments
           radius_wheel
             radius of the wheels im meter
           tread:
             the vehicles tread in meter
 
-        Keyword Arguments (either protocol and host or ev3_obj)
+        Keyword only arguments (either protocol and host or ev3_obj)
           protocol
             BLUETOOTH == 'Bluetooth'
             USB == 'Usb'
@@ -105,7 +106,7 @@ class TwoWheelVehicle(EV3):
           polarity_right
             polarity of right motor rotation (values: -1, 1, default: 1)
         """
-        assert isinstance(speed, Integral), \
+        assert isinstance(speed, int), \
             "speed needs to be an integer"
         assert speed > 0, \
             "speed needs to be positive"
@@ -162,6 +163,15 @@ class TwoWheelVehicle(EV3):
 
         self._polarity_left = polarity_left
         self._polarity_right = polarity_right
+
+    def __str__(self):
+        '''
+        description of the object in a str context
+        '''
+        return ' '.join((
+                'TwoWheelVehicle',
+                f'of {super().__str__()}'
+        ))
 
     @property
     def polarity_left(self):
@@ -438,7 +448,7 @@ class TwoWheelVehicle(EV3):
     def start_straight(
         self,
         distance: Number,
-        speed: Integral = None,
+        speed: int = None,
         brake: bool = True,
         _controlled: bool = False
     ) -> None:
@@ -461,7 +471,7 @@ class TwoWheelVehicle(EV3):
         assert isinstance(distance, Number), \
             'distance needs to be a number'
 
-        assert speed is None or isinstance(speed, Integral), \
+        assert speed is None or isinstance(speed, int), \
             'speed needs to be an integer value'
         assert speed is None or 0 < speed and speed <= 100, \
             'speed  needs to be in range [1 - 100]'
@@ -507,7 +517,7 @@ class TwoWheelVehicle(EV3):
             angle: Number,
             radius: Number,
             back: bool = False,
-            speed: Integral = None,
+            speed: int = None,
             brake: bool = True,
             _controlled: bool = False
     ) -> None:
@@ -541,7 +551,7 @@ class TwoWheelVehicle(EV3):
         assert isinstance(back, bool), \
             'back needs to be a boolean'
 
-        assert speed is None or isinstance(speed, Integral), \
+        assert speed is None or isinstance(speed, int), \
             'speed needs to be an integer value'
         assert speed is None or 0 < speed and speed <= 100, \
             'speed  needs to be in range [1 - 100]'
@@ -613,7 +623,7 @@ class TwoWheelVehicle(EV3):
             angle: Number,
             radius: Number,
             back: bool = False,
-            speed: Integral = None,
+            speed: int = None,
             brake: bool = True,
             duration: Number = None
     ) -> Task:
@@ -647,7 +657,7 @@ class TwoWheelVehicle(EV3):
         assert isinstance(back, bool), \
             'back needs to be a boolean'
 
-        assert speed is None or isinstance(speed, Integral), \
+        assert speed is None or isinstance(speed, int), \
             'speed needs to be an integer value'
         assert speed is None or 0 < speed and speed <= 100, \
             'speed  needs to be in range [1 - 100]'
@@ -708,7 +718,7 @@ class TwoWheelVehicle(EV3):
     def task_straight(
         self,
         distance: Number,
-        speed: Integral = None,
+        speed: int = None,
         brake: bool = True,
         duration: Number = None
     ) -> Task:
@@ -735,7 +745,7 @@ class TwoWheelVehicle(EV3):
         assert isinstance(distance, Number), \
             'distance needs to be a number'
 
-        assert speed is None or isinstance(speed, Integral), \
+        assert speed is None or isinstance(speed, int), \
             'speed needs to be an integer value'
         assert speed is None or 0 < speed and speed <= 100, \
             'speed  needs to be in range [1 - 100]'
@@ -781,7 +791,7 @@ class TwoWheelVehicle(EV3):
     def _move_motors_by(
             self,
             diff_motor_pos: tuple,
-            speed: Integral = None,
+            speed: int = None,
             brake: bool = True,
             _controlled: bool = False
     ):
@@ -802,11 +812,11 @@ class TwoWheelVehicle(EV3):
         assert (
             isinstance(diff_motor_pos, tuple) and
             len(diff_motor_pos) == 2 and
-            isinstance(diff_motor_pos[0], Integral) and
-            isinstance(diff_motor_pos[1], Integral)
+            isinstance(diff_motor_pos[0], int) and
+            isinstance(diff_motor_pos[1], int)
         ), 'diff_motor_pos needs to be a tuple of two integer numbers'
 
-        assert speed is None or isinstance(speed, Integral), \
+        assert speed is None or isinstance(speed, int), \
             'speed needs to be an integer value'
         assert speed is None or 0 < speed and speed <= 100, \
             'speed  needs to be in range [1 - 100]'
@@ -910,7 +920,7 @@ class TwoWheelVehicle(EV3):
     def _move_motors_to(
             self,
             target_motor_pos: tuple,
-            speed: Integral = None,
+            speed: int = None,
             brake: bool = True,
             _controlled: bool = False
     ):
@@ -931,11 +941,11 @@ class TwoWheelVehicle(EV3):
         assert (
             isinstance(target_motor_pos, tuple) and
             len(target_motor_pos) == 2 and
-            isinstance(target_motor_pos[0], Integral) and
-            isinstance(target_motor_pos[1], Integral)
+            isinstance(target_motor_pos[0], int) and
+            isinstance(target_motor_pos[1], int)
         ), 'target_motor_pos needs to be a tuple of two integer numbers'
 
-        assert speed is None or isinstance(speed, Integral), \
+        assert speed is None or isinstance(speed, int), \
             'speed needs to be an integer value'
         assert speed is None or 0 < speed and speed <= 100, \
             'speed  needs to be in range [1 - 100]'
@@ -1473,8 +1483,8 @@ class TwoWheelVehicleOld(EV3):
 
     def move_task(
         self,
-        speed: Integral,
-        turn: Integral,
+        speed: int,
+        turn: int,
         duration: Number = None
     ) -> Task:
         """
@@ -1507,11 +1517,11 @@ class TwoWheelVehicleOld(EV3):
         """
         assert duration is not None or self._sync_mode != SYNC, \
             'no unlimited operations allowed in sync_mode SYNC'
-        assert isinstance(speed, Integral), \
+        assert isinstance(speed, int), \
             "speed needs to be an integer value"
         assert -100 <= speed and speed <= 100, \
             "speed needs to be in range [-100 - 100]"
-        assert isinstance(turn, Integral), \
+        assert isinstance(turn, int), \
             "turn needs to be an integer value"
         assert -200 <= turn and turn <= 200, \
             "turn needs to be in range [-200 - 200]"
@@ -1552,11 +1562,11 @@ class TwoWheelVehicleOld(EV3):
 
               200: circle left on place
         """
-        assert isinstance(speed, Integral), \
+        assert isinstance(speed, int), \
             "speed needs to be an integer value"
         assert -100 <= speed and speed <= 100, \
             "speed needs to be in range [-100 - 100]"
-        assert isinstance(turn, Integral), \
+        assert isinstance(turn, int), \
             "turn needs to be an integer value"
         assert -200 <= turn and turn <= 200, \
             "turn needs to be in range [-200 - 200]"

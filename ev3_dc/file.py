@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 LEGO Mindstorms EV3 direct commands - filesystem
 """
@@ -36,11 +35,20 @@ class FileSystem(EV3):
     Access to EV3's filesystem
     """
 
+    def __str__(self):
+        '''
+        description of the object in a str context
+        '''
+        return ' '.join((
+                'FileSystem',
+                f'of {super().__str__()}'
+        ))
+
     def write_file(self, path: str, data: bytes) -> None:
         """
         Create a file in EV3's file system and write data into it
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path
             absolute or relative path (from "/home/root/lms2012/sys/")
@@ -102,7 +110,7 @@ class FileSystem(EV3):
         """
         Read one of EV3's files
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path
             absolute or relative path to file (f.i. "/bin/sh")
@@ -161,7 +169,7 @@ class FileSystem(EV3):
         """
         Delete a file in EV3's file system
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path
             absolute or relative path (from "/home/root/lms2012/sys/")
@@ -182,7 +190,7 @@ class FileSystem(EV3):
         its old location to a new one
         (no error if the file doesn't exist)
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path_source
             absolute or relative path (from "/home/root/lms2012/sys/")
@@ -210,7 +218,7 @@ class FileSystem(EV3):
         """
         Read one EV3 directory's content
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path
             absolute or relative path (from "/home/root/lms2012/sys/")
@@ -286,7 +294,7 @@ class FileSystem(EV3):
         """
         Create a directory in EV3's file system
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path
             absolute or relative path (from "/home/root/lms2012/sys/")
@@ -300,16 +308,16 @@ class FileSystem(EV3):
         ))
         self.send_system_cmd(cmd)
 
-    def del_dir(self, path: str, secure: bool = True) -> None:
+    def del_dir(self, path: str, *, secure: bool = True) -> None:
         """
         Delete a directory in EV3's file system
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path
             absolute or relative path (from "/home/root/lms2012/sys/")
 
-        Optional Arguments
+        Optional keyword only arguments
 
           secure
             flag, if the directory must be empty

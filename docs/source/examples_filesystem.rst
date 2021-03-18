@@ -93,7 +93,6 @@ The output:
   settings_screen.rgf                   600  55186477FDBAF838AEDA09BFDBFAABA2
   screen.rgf                           2049  ACE80443D1FA8736231BA21D63260CA4
   playrecent_screen.rgf                 600  CDBAE801B780484D80DA95538CF867C2
-  mode2.rgf                             158  944837E970D160F5FE463FC833CEBBF6
   mindstorms.rgf                        302  BCED9CC85FCB72259F4901E836AED8DF
   file_screen.rgf                       600  EFF6FAE6C487828734800AFB912DD700
   apps_screen.rgf                       600  19EA377DAD1869512B3759E28B6DECCD
@@ -103,34 +102,10 @@ The output:
   
   robot brick file             size (bytes)  md5-checksum
   ---------------------------------------------------------------------------
-  us.rbf                                221  6B486CC501AC73ED0ABD1E289CB0F46B
-  ui.rbf                               4743  5AC9D404C02D9C82A083488C3C33EB10
-  tststr.rbf                           3363  65A1D71DDF76354541953E11744E136B
-  tstmath.rbf                          1294  2BADFAF5F9441E6443E6D8D2BFB835A0
-  tstlog.rbf                             16  331BDEB1CA9445BEE0B8D27962AF41FF
-  tstiic.rbf                            142  E7787A808E00135033E0A36C7339E97B
-  tst.rbf                               118  BEF6BFD45148B1082B9CCF183BE28B13
-  str.rbf                               155  7C1060976753FB5C61CA430881D6DCFF
-  si.rbf                                235  5EE5B9642C87871336E9438B24A26096
-  performance.rbf                      2738  E0312951872172ECCC8F15A7B1BEED2E
-  p9.rbf                                103  0BE42705ABA3A4303C1F52ECA99DADEE
-  p8.rbf                                104  054D7620FFEB2ED2AE410F6B132986C7
-  p7.rbf                                103  9B79DC86BCF8C8B613EE4DD22CD5CC66
-  p6.rbf                                302  A373B9DCA3FAA4DD19E69F4A2CDDA620
-  p5.rbf                                106  76586A8709B0081D7E41F48D79D96ADA
-  p4.rbf                               1064  61E2C9C75ED0D7BF24F3E704B9DAC75E
-  p33.rbf                                90  E39A6F83CF6A34127D695357850AFE56
-  p3.rbf                                 94  BC5EDF25BBDE486F8A7870731023EE1F
-  p2.rbf                                144  506F10EA4B31B8442BAB57AD4DBB20FF
-  p12.rbf                               139  A25AE2BB35A5B24B5427132945350FE7
-  p11.rbf                                77  4320DE9031BCEFF9CAF2FC34DDBED3A3
-  p10.rbf                                79  8E6DC20AFEA6BC8BCB310F282044AC3A
-  p1.rbf                                 67  561A8CDAA6F01558360350EBE8C52B63
-  p0.rbf                                 59  49C1A7038570592E789775CC23A1325F
-  o.rbf                                1268  02B730231E09E3D3B72F25FCA80AF5E9
-  Performance.rbf                      3726  4AC6E3001ED5BFA5F6736B330FDD5B3D
+  ui.rbf                               5030  6F46636743FBDE68B489071E590F0752
+  
 
-Up to now we didn't list directories! The following program demonstrates, how to
+Now we come to directories. The following program demonstrates, how to
 recursively read a directory subtree.
 
 .. code:: python3
