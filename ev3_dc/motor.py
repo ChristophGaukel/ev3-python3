@@ -3,11 +3,12 @@
 LEGO Mindstorms EV3 direct commands - motor
 """
 
-from math import copysign
-from numbers import Integral, Number
-from thread_task import Task, Periodic, Repeated
+import math
+from numbers import Number
+from thread_task import Task, Periodic
 import struct
-from time import time
+import time
+from datetime import datetime
 from .ev3 import EV3
 from .constants import (
     BLUETOOTH,
@@ -16,8 +17,11 @@ from .constants import (
     PORT_B,
     PORT_C,
     PORT_D,
+    EV3_LARGE_MOTOR,
+    EV3_MEDIUM_MOTOR,
     opOutput_Reset,
     opOutput_Step_Speed,
+    opOutput_Time_Speed,
     opOutput_Start,
     opOutput_Test,
     opOutput_Stop,
@@ -38,15 +42,10 @@ from .constants import (
     opMath,
     opJr_Gteq32,
     READY_SI,
-    GET_TYPEMODE,
     ABS
 )
-from .functions import (
-    LCX,
-    LVX,
-    GVX,
-    port_motor_input
-)
+from .functions import LCX, LVX, GVX, port_motor_input
+from .exceptions import MotorError
 
 
 class Motor(EV3):
@@ -56,22 +55,26 @@ class Motor(EV3):
 
     def __init__(
             self,
-            port: Integral,
+            port: int,
+            *,
             protocol: str = None,
             host: str = None,
             ev3_obj: EV3 = None,
-            speed: Integral = 10,
-            ramp_up: Integral = 15,
-            ramp_down: Integral = 15,
-            delta_time: Number = None
+            speed: int = 10,
+            ramp_up: int = 15,
+            ramp_up_time: float = 0.15,
+            ramp_down: int = 15,
+            ramp_down_time: float = 0.15,
+            delta_time: Number = None,
+            verbosity: int = 0
     ):
         """
-        Positional Arguments
+        Mandatory positional arguments
 
           port
             port of motor (PORT_A, PORT_B, PORT_C or PORT_D)
 
-        Keyword Arguments (either protocol and host or ev3_obj)
+        Keyword only arguments (either protocol and host or ev3_obj)
 
           protocol
             BLUETOOTH == 'Bluetooth'
@@ -85,45 +88,93 @@ class Motor(EV3):
             percentage of maximum speed [1 - 100] (default is 10)
           ramp_up
             degrees for ramp-up (default is 15)
+          ramp_up_time
+            duration of ramp-up (used by move_for, default is 0.1 sec.)
           ramp_down
             degrees for ramp-down (default is 15)
+          ramp_down_time
+            duration of ramp-down (used by move_for, default is 0.1 sec.)
           delta_time
             timespan between  introspections [s]
             (default depends on protocol,
             USB: 0.2 sec., WIFI: 0.1 sec., USB: 0.05 sec.)
+          verbosity
+            level (0, 1, 2) of verbosity (prints on stdout).
         """
         assert port in (PORT_A, PORT_B, PORT_C, PORT_D), "incorrect port"
 
-        assert isinstance(speed, Integral), \
-            "speed needs to be an integer"
+        assert isinstance(speed, int), \
+            "speed must be an int"
         assert speed > 0, \
-            "speed needs to be positive"
+            "speed must be positive"
         assert speed <= 100, \
-            "speed needs to be lower or equal 100"
+            "speed must be lower or equal 100"
 
-        assert isinstance(ramp_up, Integral), \
-            "ramp_up needs to be an integer"
+        assert isinstance(ramp_up, int), \
+            "ramp_up must be an int"
         assert ramp_up >= 0, \
-            "ramp_up needs to be positive"
+            "ramp_up must be positive"
 
-        assert isinstance(ramp_down, Integral), \
-            "ramp_down needs to be an integer"
+        assert isinstance(ramp_down, int), \
+            "ramp_down must be an int"
         assert ramp_down >= 0, \
-            "ramp_down needs to be positive"
+            "ramp_down must be positive"
+
+        assert ramp_up_time is None or isinstance(ramp_up_time, Number), \
+            "ramp_up_time must be a number"
+        assert ramp_up_time is None or ramp_up_time >= 0, \
+            "ramp_up_time must be positive"
+
+        assert ramp_down_time is None or isinstance(ramp_down_time, Number), \
+            "ramp_down_time must be a number"
+        assert ramp_down_time is None or ramp_down_time >= 0, \
+            "ramp_down_time must be positive"
 
         assert delta_time is None or isinstance(delta_time, Number), \
-            "delta_time needs to be a number"
+            "delta_time must be a number"
         assert delta_time is None or delta_time > 0, \
-            "delta_time needs to be positive"
+            "delta_time must be positive"
 
         self._port = port
         self._speed = speed
         self._ramp_up = ramp_up
         self._ramp_down = ramp_down
+        self._ramp_up_time = ramp_up_time
+        self._ramp_down_time = ramp_down_time
 
         super().__init__(protocol=protocol, host=host, ev3_obj=ev3_obj)
-        self._type = None
-        self._target_position = None
+
+        if self._physical_ev3._introspection is None:
+            self._physical_ev3.introspection(verbosity)
+        
+        if self.sensors_as_dict[port_motor_input(self._port)] not in (
+                    EV3_LARGE_MOTOR,
+                    EV3_MEDIUM_MOTOR
+        ):
+            if self._port == PORT_A:
+                port_str = 'PORT_A'
+            elif self._port == PORT_B:
+                port_str = 'PORT_B'
+            elif self._port == PORT_C:
+                port_str = 'PORT_C'
+            else:
+                port_str = 'PORT_D'
+            raise MotorError('no motor connected at ' + port_str)
+            
+        # reset counter
+        self.send_direct_cmd(
+                b''.join((
+                    opOutput_Reset,
+                    LCX(0),  # LAYER
+                    LCX(self._port),  # NOS
+        
+                    opOutput_Clr_Count,
+                    LCX(0),  # LAYER
+                    LCX(self._port),  # NO
+                ))
+        )
+
+        self._target_position = 0
         self._current_movement = None
         if delta_time is not None:
             self._delta_time = delta_time
@@ -133,6 +184,28 @@ class Motor(EV3):
             self._delta_time = .1
         else:
             self._delta_time = .05
+        
+    def __str__(self):
+        """description of the object in a str context"""
+        if self.sensors_as_dict[port_motor_input(self._port)] == EV3_LARGE_MOTOR:
+            type_str = 'EV3_LARGE_MOTOR'
+        else:
+            type_str = 'EV3_MEDIUM_MOTOR'
+
+        if self._port == PORT_A:
+            port_str = 'PORT_A'
+        elif self._port == PORT_B:
+            port_str = 'PORT_B'
+        elif self._port == PORT_C:
+            port_str = 'PORT_C'
+        else:
+            port_str = 'PORT_D'
+
+        return ' '.join((
+                type_str,
+                f'at {port_str}',
+                f'of {super().__str__()}'
+        ))
 
     @property
     def port(self):
@@ -150,12 +223,12 @@ class Motor(EV3):
         return self._speed
 
     @speed.setter
-    def speed(self, value: Integral):
-        assert isinstance(value, Integral), "speed needs to be an integer"
+    def speed(self, value: int):
+        assert isinstance(value, int), "speed must to be an int"
         assert value > 0, \
-            "speed needs to be positive"
+            "speed must be positive"
         assert value <= 100, \
-            "speed needs to be lower or equal 100"
+            "speed must be lower or equal 100"
         self._speed = value
 
     @property
@@ -166,11 +239,11 @@ class Motor(EV3):
         return self._ramp_up
 
     @ramp_up.setter
-    def ramp_up(self, value: Integral):
-        assert isinstance(value, Integral), \
-            "ramp_up needs to be an integer"
+    def ramp_up(self, value: int):
+        assert isinstance(value, int), \
+            "ramp_up must be an int"
         assert value >= 0, \
-            "ramp_up needs to be positive"
+            "ramp_up must be positive"
         self._ramp_up = value
 
     @property
@@ -181,12 +254,42 @@ class Motor(EV3):
         return self._ramp_down
 
     @ramp_down.setter
-    def ramp_down(self, value: Integral):
-        assert isinstance(value, Integral), \
-            "ramp_down needs to be an integer"
+    def ramp_down(self, value: int):
+        assert isinstance(value, int), \
+            "ramp_down must be an int"
         assert value >= 0, \
-            "ramp_down needs to be positive"
+            "ramp_down must be positive"
         self._ramp_down = value
+
+    @property
+    def ramp_up_time(self):
+        """
+        seconds for ramp-up of timed movements (default is 0.1)
+        """
+        return self._ramp_up_time
+
+    @ramp_up_time.setter
+    def ramp_up_time(self, value: Number):
+        assert isinstance(value, Number), \
+            "ramp_up_time must be an number"
+        assert value >= 0, \
+            "ramp_up_time must be positive"
+        self._ramp_up_time = value
+
+    @property
+    def ramp_down_time(self):
+        """
+        seconds for ramp-down of timed movements (default is 0.1)
+        """
+        return self._ramp_up_time
+
+    @ramp_down_time.setter
+    def ramp_down_time(self, value: Number):
+        assert isinstance(value, Number), \
+            "ramp_down_time must be an number"
+        assert value >= 0, \
+            "ramp_down_time must be positive"
+        self._ramp_down_time = value
 
     @property
     def delta_time(self):
@@ -197,60 +300,17 @@ class Motor(EV3):
 
     @delta_time.setter
     def delta_time(self, value: Number):
-        assert isinstance(value, Number), "delta_time needs to be a number"
+        assert isinstance(value, Number), "delta_time must be a number"
         assert value > 0, \
-            "delta_time needs to be positive"
+            "delta_time must be positive"
         self._delta_time = value
 
     @property
-    def type(self):
+    def motor_type(self):
         """
         type of motor (7: EV3-Large, 8: EV3-Medium, )
         """
-        if self._type is not None:
-            return self._type
-        else:
-            ops = b''.join((
-                opInput_Device,
-                GET_TYPEMODE,  # CMD
-                LCX(0),  # LAYER
-                port_motor_input(self._port),  # NO
-                GVX(0),  # TYPE (output)
-                LVX(0),  # MODE (output)
-
-                opOutput_Reset,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-
-                opOutput_Clr_Count,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NO
-            ))
-            reply = self.send_direct_cmd(ops, local_mem=1, global_mem=1)
-            self._type = struct.unpack('<b', reply)[0]
-            return self._type
-
-    @property
-    def position(self) -> Number:
-        """
-        current position of motor
-        """
-        ops = b''.join((
-            opInput_Device,
-            READY_SI,  # CMD
-            LCX(0),  # LAYER
-            port_motor_input(self._port),  # NO
-            LCX(self.type),  # TYPE
-            LCX(0),  # MODE (Degree)
-            LCX(1),  # VALUES
-            GVX(0)  # VALUE1 (output)
-        ))
-        return round(
-            struct.unpack(
-                '<f',
-                self.send_direct_cmd(ops, global_mem=4)
-            )[0]
-        )
+        return self.sensors_as_dict[port_motor_input(self._port)]
 
     @property
     def busy(self) -> bool:
@@ -266,11 +326,38 @@ class Motor(EV3):
             )),
             global_mem=1
         )
-        busy = struct.unpack('<B', reply)[0]
+        busy = struct.unpack('B', reply)[0]
         return True if busy else False
 
-    def reset_position(self) -> None:
-        """makes the motor's current position the new zero position"""
+    @property
+    def position(self) -> Number:
+        """
+        current position of motor [degree]
+        """
+        ops = b''.join((
+            opInput_Device,
+            READY_SI,  # CMD
+            LCX(0),  # LAYER
+            port_motor_input(self._port),  # NO
+            LCX(self.motor_type),  # TYPE
+            LCX(0),  # MODE (Degree)
+            LCX(1),  # VALUES
+            GVX(0)  # VALUE1 (output)
+        ))
+        return round(
+            struct.unpack(
+                '<f',
+                self.send_direct_cmd(ops, global_mem=4)
+            )[0]
+        )
+            
+    @position.setter
+    def position(self, value: int) -> None:
+        '''
+        makes current position the new zero position
+        '''
+        assert isinstance(value, int), 'value must be an integer'
+        assert value == 0, 'position can be set to zero only' 
         assert (
             self._current_movement is None or
             'stopped' in self._current_movement
@@ -286,85 +373,10 @@ class Motor(EV3):
             ))
         )
 
-    def start(
-        self,
-        speed: Integral = None,
-        direction: Integral = 1
-    ) -> None:
-        '''starts unlimited movement with constant speed
 
-        Keyword Arguments
-
-          speed
-            speed of movement
-          direction
-            direction of movement (-1 or 1)
+    def stop(self, *, brake: bool = False) -> None:
         '''
-        assert speed is None or isinstance(speed, Integral), \
-            'speed needs to be an integer value'
-        assert speed is None or 0 < speed and speed <= 100, \
-            'speed  needs to be in range [1 - 100]'
-
-        assert direction is None or isinstance(direction, Integral), \
-            'direction needs to be an integer value'
-        assert direction in (-1, 1), \
-            'direction needs to be 1 (forwards) or -1 (backwards)'
-
-        if speed is None:
-            speed = self._speed
-
-        speed *= direction
-
-        if self._type is None:
-            ops = b''.join((
-                opInput_Device,
-                GET_TYPEMODE,  # CMD
-                LCX(0),  # LAYER
-                port_motor_input(self._port),  # NO
-                GVX(0),  # TYPE (output)
-                LVX(0),  # MODE (output)
-
-                opOutput_Reset,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-
-                opOutput_Clr_Count,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NO
-
-                opOutput_Speed,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-                LCX(speed),  # SPEED
-
-                opOutput_Start,
-                LCX(0),  # LAYER
-                LCX(self._port)  # NOS
-            ))
-            reply = self.send_direct_cmd(ops, local_mem=1, global_mem=1)
-            self._type = struct.unpack('<b', reply)[0]
-        else:
-            ops = b''.join((
-                opOutput_Speed,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-                LCX(speed),  # SPEED
-
-                opOutput_Start,
-                LCX(0),  # LAYER
-                LCX(self._port)  # NOS
-            ))
-            self.send_direct_cmd(ops)
-
-        self._target_position = None
-        self._current_movement = {
-            'op': 'Speed',
-            'speed': speed,
-            'unlimited': True
-        }
-
-    def stop(self, brake: bool = False) -> None:
-        '''stops the current motor movement, sets or releases brake
+        stops the current motor movement, sets or releases brake
 
         Keyword Arguments
 
@@ -387,17 +399,62 @@ class Motor(EV3):
             pass
         else:
             self._current_movement['stopped'] = True
+            if self._current_movement['op'] == 'Time_Speed':
+                self._current_movement['duration_rest'] = (
+                        self._current_movement['duration'] - (
+                                datetime.now() -
+                                self._current_movement['started_at']
+                        ).total_seconds()
+                )
+                if self._current_movement['duration_rest'] < 0.001:
+                    self._current_movement = None
 
-    def cont(self):
+    def stop_as_task(self, *, brake: bool = False) -> Task:
+        '''
+        stops the current motor movement, with or without brake
+        (can be used to release brake)
+
+        Optional keyword arguments
+
+          brake
+            flag if stopping with active brake
+            
+        Returns
+        
+          thread_task.Task object, which does the stopping
+        '''
+        assert isinstance(brake, bool), \
+            'brake must be a boolean'
+        return Task(
+                self.stop,
+                kwargs={'brake': brake}
+        )
+
+    def cont(self) -> None:
+        '''
+        continues a stopped movement
+        '''
         if self._current_movement is None:
-            # movement was already finished
+            # movement already has been finished
             return
 
         assert 'stopped' in self._current_movement, \
             "can't continue unstopped movement"
 
+        if self._current_movement['op'] == 'Time_Speed':
+            self.start_move_for(
+                self._current_movement['duration_rest'],
+                speed=self._current_movement['speed'],
+                direction=self._current_movement['direction'],
+                ramp_up_time=self._current_movement['ramp_up_time'],
+                ramp_down_time=self._current_movement['ramp_down_time'],
+                brake=self._current_movement['brake'],
+                _controlled=True
+            )
+            return
+
         if self._current_movement['op'] == 'Step_Speed':
-            return self.start_move_to(
+            self.start_move_to(
                 self._current_movement['target_position'],
                 speed=self._current_movement['speed'],
                 ramp_up=self._current_movement['ramp_up'],
@@ -405,15 +462,19 @@ class Motor(EV3):
                 brake=self._current_movement['brake'],
                 _controlled=True
             )
+            return
 
         if (
             self._current_movement['op'] == 'Speed' and
             'unlimited' in self._current_movement
         ):
-            return self.start(
+            self.start(
                 speed=abs(self._current_movement['speed']),
-                direction=int(copysign(1, self._current_movement['speed']))
+                direction=int(
+                        math.copysign(1, self._current_movement['speed'])
+                )
             )
+            return
 
         current_position = self.position
 
@@ -442,117 +503,30 @@ class Motor(EV3):
         self.send_direct_cmd(ops)
 
         self._current_movement['last_position'] = current_position
-        self._current_movement['last_time'] = time()
+        self._current_movement['last_time'] = time.time()
         del self._current_movement['stopped']
 
-    def _start_move_steady(
-        self,
-        degrees: Integral,
-        speed: Integral = None,
-        _controlled: bool = False
-    ):
-        '''start movement with constant speed
+    def cont_as_task(self) -> Task:
         '''
-        assert isinstance(degrees, Integral), \
-            'degrees needs to be an integer value'
-
-        assert speed is None or isinstance(speed, Integral), \
-            'speed needs to be an integer value'
-        assert speed is None or 0 < speed and speed <= 100, \
-            'speed  needs to be in range [1 - 100]'
-
-        assert (
-            self._current_movement is None or
-            'stopped' in self._current_movement
-        ), "concurrent movement in progress"
-
-        if speed is None:
-            speed = self._speed
-
-        speed *= round(copysign(1, degrees))
-
-        if self._type is None:
-            ops = b''.join((
-                opInput_Device,
-                GET_TYPEMODE,  # CMD
-                LCX(0),  # LAYER
-                port_motor_input(self._port),  # NO
-                GVX(0),  # TYPE (output)
-                LVX(0),  # MODE (output)
-
-                opOutput_Reset,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-
-                opOutput_Clr_Count,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NO
-
-                opOutput_Speed,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-                LCX(speed),  # SPEED
-
-                opOutput_Start,
-                LCX(0),  # LAYER
-                LCX(self._port)  # NOS
-            ))
-            reply = self.send_direct_cmd(ops, local_mem=1, global_mem=1)
-            self._type = struct.unpack('<b', reply)[0]
-            self._target_position = 0
-            position = 0
-        else:
-            ops = b''.join((
-                opInput_Device,
-                READY_SI,
-                LCX(0),  # LAYER
-                port_motor_input(self._port),  # NO
-                LCX(self._type),  # TYPE
-                LCX(0),  # MODE (Degree)
-                LCX(1),  # VALUES
-                GVX(0),  # VALUE1 (output)
-
-                opOutput_Speed,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-                LCX(speed),  # SPEED
-
-                opOutput_Start,
-                LCX(0),  # LAYER
-                LCX(self._port)  # NOS
-            ))
-            reply = self.send_direct_cmd(ops, global_mem=4)
-            position = round(struct.unpack('<f', reply)[0])
-
-        if self._target_position is None:
-            target_position = position + degrees
-        else:
-            target_position = (
-                self._target_position + degrees
-            )
-            self._target_position = None
-
-        if _controlled:
-            self._current_movement = {
-                'op': 'Speed',
-                'speed': speed,
-                'target_position': target_position,
-                'last_position': position,
-                'last_time': time()
-            }
-        else:
-            self._current_movement = None
+        continues a stopped movement
+            
+        Returns
+        
+          thread_task.Task object, which does the continuing
+        '''
+        return Task(self.cont)
 
     def _control_repeated(self):
-        '''returns timespan to next call [s]'''
+        '''
+        returns timespan to next call [s]
+        '''
         if self._current_movement is None:
             # prevent needless data traffic
             return -1
         if self._current_movement['op'] != 'Speed':
             RuntimeError('concurrent movements')
-        print('0.0 inside _control_repeated', self._current_movement)
-        # last one
         if 'last' in self._current_movement:
+            # last one
             self._target_position = (
                 self._current_movement['target_position']
             )
@@ -560,7 +534,7 @@ class Motor(EV3):
             return -1
 
         position = self.position
-        now = time()
+        now = time.time()
 
         speed = self._current_movement['speed']
         target_position = self._current_movement['target_position']
@@ -583,7 +557,10 @@ class Motor(EV3):
         delta_t = now - self._current_movement['last_time']
         delta_pos = position - self._current_movement['last_position']
 
-        if delta_pos == 0 or copysign(1, speed) * delta_pos < 0:
+        if (
+                delta_pos == 0 or
+                math.copysign(1, speed) * delta_pos < 0
+        ):
             return 2*delta_t
 
         rest_pos = target_position - position
@@ -600,63 +577,19 @@ class Motor(EV3):
 
         return wait
 
-    def task_move_steady(
+
+    def start_move_by(
         self,
-        degrees: Integral,
-        speed: Integral = None
-    ) -> Task:
-        '''steady movement of the motor by a given angle.
-        Does not stop, but the Task ends, just when the movement is done.
-
-        Positional Arguments
-
-          degrees
-            angle of constant speed movement in degrees.
-
-        Keyword Arguments
-
-          speed
-            percentage of maximum speed [1 - 100]
-
-        Returns
-
-          Task object, that can be started, stopped and continued.
-        '''
-        assert speed is None or isinstance(speed, Integral), \
-            'speed needs to be an integer value'
-        assert speed is None or 0 < speed and speed <= 100, \
-            'speed  needs to be in range [1 - 100]'
-
-        assert isinstance(degrees, Integral), \
-            'degrees needs to be an integer value'
-
-        t_start = Task(
-            self._start_move_steady,
-            args=(degrees,),
-            kwargs={
-                'speed': speed,
-                '_controlled': True
-            },
-            duration=self._delta_time,
-            action_stop=self.stop,
-            args_stop=(False,),
-            action_cont=self.cont
-        )
-
-        return Task(
-            t_start + Repeated(self._control_repeated)
-        )
-
-    def start_move(
-        self,
-        degrees: Integral,
-        speed: Integral = None,
-        ramp_up: Integral = None,
-        ramp_down: Integral = None,
-        brake: bool = True,
+        degrees: int,
+        *,
+        speed: int = None,
+        ramp_up: int = None,
+        ramp_down: int = None,
+        brake: bool = False,
         _controlled: bool = False
-    ):
-        '''start moving the motor by a given angle (without time control).
+    ) -> None:
+        '''
+        starts moving the motor by a given angle (without time control).
 
         Positional Arguments
 
@@ -677,26 +610,26 @@ class Motor(EV3):
           brake
             Flag if ending with floating motor (False) or active brake (True).
         '''
-        assert isinstance(degrees, Integral), \
-            'degrees needs to be an integer value'
+        assert isinstance(degrees, int), \
+            'degrees must be an int value'
 
-        assert speed is None or isinstance(speed, Integral), \
-            'speed needs to be an integer value'
+        assert speed is None or isinstance(speed, int), \
+            'speed must be an int value'
         assert speed is None or 0 < speed and speed <= 100, \
-            'speed  needs to be in range [1 - 100]'
+            'speed  must be in range [1 - 100]'
 
-        assert ramp_up is None or isinstance(ramp_up, Integral), \
-            "ramp_up needs to be an integer"
+        assert ramp_up is None or isinstance(ramp_up, int), \
+            "ramp_up must be an int"
         assert ramp_up is None or ramp_up >= 0, \
-            "ramp_up needs to be positive"
+            "ramp_up must be positive"
 
-        assert ramp_down is None or isinstance(ramp_down, Integral), \
-            "ramp_down needs to be an integer"
+        assert ramp_down is None or isinstance(ramp_down, int), \
+            "ramp_down must be an int"
         assert ramp_down is None or ramp_down >= 0, \
-            "ramp_down needs to be positive"
+            "ramp_down must be positive"
 
         assert isinstance(brake, bool), \
-            'brake needs to be a boolean'
+            'brake must be a boolean'
         assert self._current_movement is None, \
             'concurrent movement in progress'
 
@@ -731,68 +664,35 @@ class Motor(EV3):
             step2 = 0
             step3 = round(abs(degrees) - step1)
 
-        speed *= round(copysign(1, degrees))
+        speed *= round(
+                math.copysign(1, degrees)
+        )
 
-        if self._type is None:
-            self._initialized = True
-            ops = b''.join((
-                opInput_Device,
-                GET_TYPEMODE,  # CMD
-                LCX(0),  # LAYER
-                port_motor_input(self._port),  # NO
-                GVX(0),  # TYPE (output)
-                LVX(0),  # MODE (output)
+        ops = b''.join((
+            opInput_Device,
+            READY_SI,
+            LCX(0),  # LAYER
+            port_motor_input(self._port),  # NO
+            LCX(self.sensors_as_dict[port_motor_input(self._port)]),  # TYPE
+            LCX(0),  # MODE (Degree)
+            LCX(1),  # VALUES
+            GVX(0),  # VALUE1 (output)
 
-                opOutput_Reset,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
+            opOutput_Step_Speed,
+            LCX(0),  # LAYER
+            LCX(self._port),  # NOS
+            LCX(speed),  # SPEED
+            LCX(step1),  # STEP1
+            LCX(step2),  # STEP2
+            LCX(step3),  # STEP3
+            LCX(1 if brake else 0),  # BRAKE - 1 (yes) or 0 (no)
 
-                opOutput_Clr_Count,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NO
-
-                opOutput_Step_Speed,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-                LCX(speed),  # SPEED
-                LCX(step1),  # STEP1
-                LCX(step2),  # STEP2
-                LCX(step3),  # STEP3
-                LCX(brake),  # BRAKE - 1 (yes) or 0 (no)
-
-                opOutput_Start,
-                LCX(0),  # LAYER
-                LCX(self._port)  # NOS
-            ))
-            reply = self.send_direct_cmd(ops, local_mem=1, global_mem=1)
-            self._type = struct.unpack('<b', reply)[0]
-            position = 0
-        else:
-            ops = b''.join((
-                opInput_Device,
-                READY_SI,
-                LCX(0),  # LAYER
-                port_motor_input(self._port),  # NO
-                LCX(self._type),  # TYPE
-                LCX(0),  # MODE (Degree)
-                LCX(1),  # VALUES
-                GVX(0),  # VALUE1 (output)
-
-                opOutput_Step_Speed,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-                LCX(speed),  # SPEED
-                LCX(step1),  # STEP1
-                LCX(step2),  # STEP2
-                LCX(step3),  # STEP3
-                LCX(1 if brake else 0),  # BRAKE - 1 (yes) or 0 (no)
-
-                opOutput_Start,
-                LCX(0),  # LAYER
-                LCX(self._port)  # NOS
-            ))
-            reply = self.send_direct_cmd(ops, global_mem=4)
-            position = round(struct.unpack('<f', reply)[0])
+            opOutput_Start,
+            LCX(0),  # LAYER
+            LCX(self._port)  # NOS
+        ))
+        reply = self.send_direct_cmd(ops, global_mem=4)
+        position = round(struct.unpack('<f', reply)[0])
 
         if _controlled:
             self._current_movement = {
@@ -808,7 +708,9 @@ class Motor(EV3):
             self._current_movement = None
 
     def _control_periodic(self):
-        '''Periodic needs inverse flag of property busy'''
+        '''
+        Periodic needs inverse flag of property busy
+        '''
         if self._current_movement is None:
             # prevent needless data traffic
             return True
@@ -822,16 +724,18 @@ class Motor(EV3):
             self._current_movement = None
             return True
 
-    def task_move(
+    def move_by(
         self,
-        degrees: Integral,
-        speed: Integral = None,
-        ramp_up: Integral = None,
-        ramp_down: Integral = None,
-        brake: bool = True,
+        degrees: int,
+        *,
+        speed: int = None,
+        ramp_up: int = None,
+        ramp_down: int = None,
+        brake: bool = False,
         duration: Number = None
     ) -> Task:
-        '''exact and smooth movement of the motor by a given angle.
+        '''
+        exact and smooth movement of the motor by a given angle.
 
         Positional Arguments
 
@@ -859,72 +763,82 @@ class Motor(EV3):
 
           Task object, that can be started, stopped and continued.
         '''
-        assert isinstance(degrees, Integral), \
-            'degrees needs to be an integer value'
+        assert isinstance(degrees, int), \
+            'degrees must be an int value'
 
-        assert speed is None or isinstance(speed, Integral), \
-            'speed needs to be an integer value'
+        assert speed is None or isinstance(speed, int), \
+            'speed must be an int value'
         assert speed is None or 0 < speed and speed <= 100, \
-            'speed  needs to be in range [1 - 100]'
+            'speed  must be in range [1 - 100]'
 
-        assert ramp_up is None or isinstance(ramp_up, Integral), \
-            "ramp_up needs to be an integer"
+        assert ramp_up is None or isinstance(ramp_up, int), \
+            "ramp_up must be an int"
         assert ramp_up is None or ramp_up >= 0, \
-            "ramp_up needs to be positive"
+            "ramp_up must be positive"
 
-        assert ramp_down is None or isinstance(ramp_down, Integral), \
-            "ramp_down needs to be an integer"
+        assert ramp_down is None or isinstance(ramp_down, int), \
+            "ramp_down must be an int"
         assert ramp_down is None or ramp_down >= 0, \
-            "ramp_down needs to be positive"
+            "ramp_down must be positive"
 
         assert isinstance(brake, bool), \
-            'brake needs to be a boolean'
+            'brake must be a boolean'
         assert self._current_movement is None, \
             'concurrent movement in progress'
 
         assert duration is None or isinstance(duration, Number), \
-            'duration needs to be a number'
+            'duration must be a number'
         assert duration is None or duration > 0, \
-            'duration needs to be positive'
+            'duration must be positive'
 
-        t_start = Task(
-            self.start_move,
-            args=(degrees,),
-            kwargs={
-                'speed': speed,
-                'ramp_up': ramp_up,
-                'ramp_down': ramp_down,
-                'brake': brake,
-                '_controlled': True
-            },
-            duration=self._delta_time,
-            action_stop=self.stop,
-            args_stop=(False,),
-            action_cont=self.cont
-        )
+        if speed is None:
+            speed = self._speed
+        if ramp_up is None:
+            ramp_up = self._ramp_up
+        if ramp_down is None:
+            ramp_down = self._ramp_down
 
         return Task(
-            t_start + Periodic(self._delta_time, self._control_periodic),
-            duration=duration
+                self.start_move_by,
+                args=(degrees,),
+                kwargs={
+                    'speed': speed,
+                    'ramp_up': ramp_up,
+                    'ramp_down': ramp_down,
+                    'brake': brake,
+                    '_controlled': True
+                },
+                duration=self._delta_time,
+                action_stop=self.stop,
+                kwargs_stop={'brake': False},
+                action_cont=self.cont
+        ) + Periodic(
+                self._delta_time,
+                self._control_periodic,
+                action_stop=self.stop,
+                kwargs_stop={'brake': False},
+                action_cont=self.cont               
         )
 
     def start_move_to(
         self,
-        position: Integral,
-        speed: Integral = None,
-        ramp_up: Integral = None,
-        ramp_down: Integral = None,
-        brake: bool = True,
+        position: int,
+        *,
+        speed: int = None,
+        ramp_up: int = None,
+        ramp_down: int = None,
+        brake: bool = False,
         _controlled: bool = False
     ):
-        '''start moving the motor to a given position (without time control).
+        '''
+        start moving the motor to a given position (without time control).
 
-        Positional Arguments
+        Mandatory positional arguments
 
           position
             target position (degrees)
 
-        Keyword Arguments
+        Optional keyword only arguments
 
           speed
             percentage of maximum speed [1 - 100]
@@ -935,29 +849,29 @@ class Motor(EV3):
           brake
             flag if ending with floating motor (False) or active brake (True).
         '''
-        assert isinstance(position, Integral), \
-            'position needs to be an integer value'
+        assert isinstance(position, int), \
+            'position must be an int value'
 
-        assert speed is None or isinstance(speed, Integral), \
-            'speed needs to be an integer value'
+        assert speed is None or isinstance(speed, int), \
+            'speed must be an int value'
         assert speed is None or 0 < speed and speed <= 100, \
-            'speed  needs to be in range [1 - 100]'
+            'speed  must be in range [1 - 100]'
 
-        assert ramp_up is None or isinstance(ramp_up, Integral), \
-            "ramp_up needs to be an integer"
+        assert ramp_up is None or isinstance(ramp_up, int), \
+            "ramp_up must be an int"
         assert ramp_up is None or ramp_up >= 0, \
-            "ramp_up needs to be positive"
+            "ramp_up must be positive"
 
-        assert ramp_down is None or isinstance(ramp_down, Integral), \
-            "ramp_down needs to be an integer"
+        assert ramp_down is None or isinstance(ramp_down, int), \
+            "ramp_down must be an int"
         assert ramp_down is None or ramp_down >= 0, \
-            "ramp_down needs to be positive"
+            "ramp_down must be positive"
 
         assert isinstance(brake, bool), \
-            'brake needs to be a boolean'
+            'brake must be a boolean'
 
         assert isinstance(_controlled, bool), \
-            '_controlled needs to be a boolean'
+            '_controlled must be a boolean'
 
         assert (
             self._current_movement is None or
@@ -973,50 +887,22 @@ class Motor(EV3):
 
         step1 = ramp_up
         step3 = ramp_down
+        ops = b''.join((
 
-        if self._type is None:
-            ops = b''.join((
-                opInput_Device,
-                GET_TYPEMODE,  # CMD
-                LCX(0),  # LAYER
-                port_motor_input(self._port),  # NO
-                GVX(0),  # TYPE (output)
-                LVX(0),  # MODE (output)
+            opOutput_Reset,
+            LCX(0),  # LAYER
+            LCX(self._port),  # NOS
 
-                opOutput_Reset,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
+            # current position
 
-                opOutput_Clr_Count,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NO
-
-                # current position
-
-                opMove32_F,
-                LCX(0),  # SOURCE
-                LVX(0),  # DESTINATION - from_position (DATAF)
-            ))
-        else:
-            ops = b''.join((
-
-                opOutput_Reset,
-                LCX(0),  # LAYER
-                LCX(self._port),  # NOS
-
-                # current position
-
-                opInput_Device,
-                READY_SI,
-                LCX(0),  # LAYER
-                port_motor_input(self._port),  # NO
-                LCX(self._type),  # TYPE (EV3-Medium-Motor)
-                LCX(0),  # MODE (Degree)
-                LCX(1),  # VALUES
-                LVX(0),  # VALUE1 - from_position (DATAF)
-            ))
-
-        ops += b''.join((
+            opInput_Device,
+            READY_SI,
+            LCX(0),  # LAYER
+            port_motor_input(self._port),  # NO
+            LCX(self.sensors_as_dict[port_motor_input(self._port)]),  # TYPE (EV3-Medium-Motor)
+            LCX(0),  # MODE (Degree)
+            LCX(1),  # VALUES
+            LVX(0),  # VALUE1 - from_position (DATAF)
 
             # speed and step2
 
@@ -1126,9 +1012,9 @@ class Motor(EV3):
             LCX(self._port)  # NOS
         ))
 
-        if self._type is None:
+        if self.sensors_as_dict[port_motor_input(self._port)] is None:
             reply = self.send_direct_cmd(ops, local_mem=24, global_mem=1)
-            self._type = struct.unpack('<b', reply)[0]
+            self.sensors_as_dict[port_motor_input(self._port)] = struct.unpack('<b', reply)[0]
         else:
             self.send_direct_cmd(ops, local_mem=24)
 
@@ -1145,23 +1031,25 @@ class Motor(EV3):
             self._target_position = None
             self._current_movement = None
 
-    def task_move_to(
+    def move_to(
         self,
-        position: Integral,
-        speed: Integral = None,
-        ramp_up: Integral = None,
-        ramp_down: Integral = None,
-        brake: bool = True,
+        position: int,
+        *,
+        speed: int = None,
+        ramp_up: int = None,
+        ramp_down: int = None,
+        brake: bool = False,
         duration: Number = None
     ) -> Task:
-        '''move the motor to a given position.
+        '''
+        move the motor to a given position.
 
-        Positional Arguments
+        Mandatory positional arguments
 
           position
             target position (degrees)
 
-        Keyword Arguments
+        Optional keyword only arguments
 
           speed
             percentage of maximum speed [1 - 100]
@@ -1176,51 +1064,339 @@ class Motor(EV3):
 
         Returns
 
-          Task object, that can be started, stopped and continued.
+          Task object, which can be started, stopped and continued.
         '''
-        assert isinstance(position, Integral), \
-            'position needs to be an integer value'
+        assert isinstance(position, int), \
+            'position must be an int value'
 
-        assert speed is None or isinstance(speed, Integral), \
-            'speed needs to be an integer value'
+        assert speed is None or isinstance(speed, int), \
+            'speed must be an int value'
         assert speed is None or 0 < speed and speed <= 100, \
-            'speed  needs to be in range [1 - 100]'
+            'speed  must be in range [1 - 100]'
 
-        assert ramp_up is None or isinstance(ramp_up, Integral), \
-            "ramp_up needs to be an integer"
+        assert ramp_up is None or isinstance(ramp_up, int), \
+            "ramp_up must be an int"
         assert ramp_up is None or ramp_up >= 0, \
-            "ramp_up needs to be positive"
+            "ramp_up must be positive"
 
-        assert ramp_down is None or isinstance(ramp_down, Integral), \
-            "ramp_down needs to be an integer"
+        assert ramp_down is None or isinstance(ramp_down, int), \
+            "ramp_down must be an int"
         assert ramp_down is None or ramp_down >= 0, \
-            "ramp_down needs to be positive"
+            "ramp_down must be positive"
 
         assert isinstance(brake, bool), \
-            'brake needs to be a boolean'
+            'brake must be a boolean'
 
         assert duration is None or isinstance(duration, Number), \
-            'duration needs to be a number'
+            'duration must be a number'
         assert duration is None or duration > 0, \
-            'duration needs to be positive'
+            'duration must be positive'
 
-        t_start = Task(
-            self.start_move_to,
-            args=(position,),
-            kwargs={
-                'speed': speed,
-                'ramp_up': ramp_up,
-                'ramp_down': ramp_down,
-                'brake': brake,
-                '_controlled': True
-            },
-            duration=self._delta_time,
-            action_stop=self.stop,
-            args_stop=(False,),
-            action_cont=self.cont
-        )
+        if speed is None:
+            speed = self._speed
+        if ramp_up is None:
+            ramp_up = self._ramp_up
+        if ramp_down is None:
+            ramp_down = self._ramp_down
+            
+        if duration is not None:
+            duration = max(0., duration - self._delta_time)
 
         return Task(
-            t_start + Periodic(self._delta_time, self._control_periodic),
-            duration=duration
+                self.start_move_to,
+                args=(position,),
+                kwargs={
+                    'speed': speed,
+                    'ramp_up': ramp_up,
+                    'ramp_down': ramp_down,
+                    'brake': brake,
+                    '_controlled': True
+                },
+                duration=self._delta_time,
+                action_stop=self.stop,
+                kwargs_stop={'brake': False},
+                action_cont=self.cont
+        ) + Periodic(
+                self._delta_time,
+                self._control_periodic,
+                duration=duration,
+                action_stop=self.stop,
+                kwargs_stop={'brake': False},
+                action_cont=self.cont
+        )
+
+        
+    def start_move_for(
+        self,
+        duration: float,
+        *,
+        speed: int = None,
+        direction: int = 1,
+        ramp_up_time: float = None,
+        ramp_down_time: float = None,
+        brake: bool = False,
+        _controlled: bool = False
+    ) -> None:
+        '''
+        start moving the motor for a given duration.
+
+        Mandatory positional arguments
+
+          duration
+            duration of the movement [sec.]
+
+        Optional keyword only arguments
+
+          speed
+            percentage of maximum speed [1 - 100]
+          direction
+            direction of movement (-1 or 1)
+          ramp_up_time
+            duration time for ramp-up [sec.]
+          ramp_down_time
+            duration time for ramp-down [sec.]
+          brake
+            flag if ending with floating motor (False) or active brake (True).
+        '''
+        assert isinstance(duration, Number), \
+            "duration must be a number"
+        assert duration >= 0.001, \
+            "duration must be at least one millisecond"
+
+        assert speed is None or isinstance(speed, int), \
+            'speed must be an int value'
+        assert speed is None or 0 < speed and speed <= 100, \
+            'speed  must be in range [1 - 100]'
+
+        assert isinstance(direction, int), \
+            'direction must be an int value'
+        assert direction in (-1, 1), \
+            'direction must be 1 (forwards) or -1 (backwards)'
+
+        assert ramp_up_time is None or isinstance(ramp_up_time, Number), \
+            "ramp_up_time must be a number"
+        assert ramp_up_time is None or ramp_up_time >= 0, \
+            "ramp_up_time must be positive"
+
+        assert ramp_down_time is None or isinstance(ramp_down_time, Number), \
+            "ramp_down_time must be a number"
+        assert ramp_down_time is None or ramp_down_time >= 0, \
+            "ramp_down_time must be positive"
+
+        assert isinstance(brake, bool), \
+            'brake must be a boolean'
+
+        assert (
+            self._current_movement is None or
+            'stopped' in self._current_movement
+        ), "concurrent movement in progress"
+
+        if speed is None:
+            speed = self._speed
+        if ramp_up_time is None:
+            ramp_up_time = self._ramp_up_time
+        if ramp_down_time is None:
+            ramp_down_time = self._ramp_down_time
+
+        steady_ms = int(
+                1000 *
+                (duration - ramp_up_time - ramp_down_time)
+        )
+        if steady_ms < 0:
+            speed = int(speed * duration / (ramp_up_time + ramp_down_time))
+            steady_ms = 0
+            ramp_up_ms = int(
+                    1000 *
+                    duration *
+                    ramp_up_time /
+                    (ramp_up_time + ramp_down_time)
+            )
+            ramp_down_ms = int(1000 * duration - ramp_up_ms)
+        else:
+            ramp_up_ms = int(1000 * ramp_up_time)
+            ramp_down_ms = int(1000 * ramp_down_time)
+
+        ops = b''.join((
+            opOutput_Time_Speed,
+            LCX(0),  # LAYER
+            LCX(self._port),  # NOS
+            LCX(direction * speed),  # SPEED
+            LCX(ramp_up_ms),  # STEP1
+            LCX(steady_ms),  # STEP2
+            LCX(ramp_down_ms),  # STEP3
+            LCX(1 if brake else 0),  # BRAKE - 1 (yes) or 0 (no)
+
+            opOutput_Start,
+            LCX(0),  # LAYER
+            LCX(self._port)  # NOS
+        ))
+        self.send_direct_cmd(ops)
+
+        if _controlled:
+            self._current_movement = {
+                'op': 'Time_Speed',
+                'duration': duration,
+                'speed': speed,
+                'direction': direction,
+                'ramp_up_time': ramp_up_time,
+                'ramp_down_time': ramp_down_time,
+                'brake': brake,
+                'started_at': datetime.now()
+            }
+        else:
+            self._target_position = None
+            self._current_movement = None
+
+        
+    def move_for(
+        self,
+        duration: float,
+        *,
+        speed: int = None,
+        direction: int = 1,
+        ramp_up_time: float = None,
+        ramp_down_time: float = None,
+        brake: bool = False
+    ) -> Task:
+        '''
+        start moving the motor for a given duration.
+
+        Mandatory positional arguments
+
+          duration
+            duration of the movement [sec.]
+
+        Optional keyword only arguments
+
+          speed
+            percentage of maximum speed [1 - 100]
+          direction
+            direction of movement (-1 or 1)
+          ramp_up_time
+            duration time for ramp-up [sec.]
+          ramp_down_time
+            duration time for ramp-down [sec.]
+          brake
+            flag if ending with floating motor (False) or active brake (True).
+
+        Returns
+
+          Task object, which can be started, stopped and continued.
+        '''
+        assert isinstance(duration, Number), \
+            "duration must be a number"
+        assert duration >= 0.001, \
+            "duration must be at least one millisecond"
+
+        assert speed is None or isinstance(speed, int), \
+            'speed must be an int value'
+        assert speed is None or 0 < speed and speed <= 100, \
+            'speed  must be in range [1 - 100]'
+
+        assert isinstance(direction, int), \
+            'direction must be an int value'
+        assert direction in (-1, 1), \
+            'direction must be 1 (forwards) or -1 (backwards)'
+
+        assert ramp_up_time is None or isinstance(ramp_up_time, Number), \
+            "ramp_up_time must be a number"
+        assert ramp_up_time is None or ramp_up_time >= 0, \
+            "ramp_up_time must be positive"
+
+        assert ramp_down_time is None or isinstance(ramp_down_time, Number), \
+            "ramp_down_time must be a number"
+        assert ramp_down_time is None or ramp_down_time >= 0, \
+            "ramp_down_time must be positive"
+
+        assert isinstance(brake, bool), \
+            'brake must be a boolean'
+
+        if speed is None:
+            speed = self._speed
+        if ramp_up_time is None:
+            ramp_up_time = self._ramp_up_time
+        if ramp_down_time is None:
+            ramp_down_time = self._ramp_down_time
+
+        return Task(
+                self.start_move_for,
+                args=(duration,),
+                kwargs={
+                    'speed': speed,
+                    'direction': direction,
+                    'ramp_up_time': ramp_up_time,
+                    'ramp_down_time': ramp_down_time,
+                    'brake': brake,
+                    '_controlled': True
+                },
+                duration=duration,
+                action_stop=self.stop,
+                kwargs_stop={'brake': False},
+                action_cont=self.cont
+        ) + Task(
+                self._final_move_for
+        )
+
+    
+    def _final_move_for(self) -> None:
+        '''
+        correctly finishes a controlled movement move_for
+        '''
+        assert self._current_movement is not None, \
+            'no controlled movement'
+        assert self._current_movement['op'] == 'Time_Speed', \
+            'not the expected movement: ' + self._current_movement['op']
+
+        self._current_movement = None
+        self._target_position = None
+
+        
+    def start_move(
+        self,
+        *,
+        speed: int = None,
+        direction: int = 1,
+        ramp_up_time: float = None
+    ) -> None:
+        '''
+        starts unlimited movement of the motor.
+
+        Optional keyword only arguments
+
+          speed
+            percentage of maximum speed [1 - 100]
+          direction
+            direction of movement (-1 or 1)
+          ramp_up_time
+            duration time for ramp-up [sec.]
+        '''
+        assert speed is None or isinstance(speed, int), \
+            'speed must be an int value'
+        assert speed is None or 0 < speed and speed <= 100, \
+            'speed  must be in range [1 - 100]'
+
+        assert isinstance(direction, int), \
+            'direction must be an int value'
+        assert direction in (-1, 1), \
+            'direction must be 1 (forwards) or -1 (backwards)'
+
+        assert ramp_up_time is None or isinstance(ramp_up_time, Number), \
+            "ramp_up_time must be a number"
+        assert ramp_up_time is None or ramp_up_time >= 0, \
+            "ramp_up_time must be positive"
+
+        assert (
+            self._current_movement is None or
+            'stopped' in self._current_movement
+        ), "concurrent movement in progress"
+
+        if ramp_up_time is None:
+            ramp_up_time = self._ramp_up_time
+
+        self.start_move_for(
+                2147483.847 - ramp_up_time,  # ~ 596.5 hours
+                speed=speed,
+                direction=direction,
+                ramp_up_time=ramp_up_time,
+                ramp_down_time=0
         )

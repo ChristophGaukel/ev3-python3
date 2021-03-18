@@ -665,24 +665,26 @@ class TwoWheelVehicle(EV3):
         if speed is None:
             speed = self._speed
 
-        t_start = Task(
-            self.start_turn,
-            args=(angle, radius),
-            kwargs={
-                'back': back,
-                'speed': speed,
-                'brake': brake,
-                '_controlled': True
-            },
-            duration=self._delta_time,
-            action_stop=self.stop,
-            args_stop=(False,),
-            action_cont=self.cont
-        )
-
         return Task(
-            t_start + Periodic(self._delta_time, self._control_periodic),
-            duration=duration
+                self.start_turn,
+                args=(angle, radius),
+                kwargs={
+                    'back': back,
+                    'speed': speed,
+                    'brake': brake,
+                    '_controlled': True
+                },
+                duration=self._delta_time,
+                action_stop=self.stop,
+                args_stop=(False,),
+                action_cont=self.cont
+        ) + Periodic(
+                self._delta_time,
+                self._control_periodic,
+                duration=duration - self._delta_time,
+                action_stop=self.stop,
+                args_stop=(False,),
+                action_cont=self.cont
         )
 
     def _control_periodic(self):
@@ -753,24 +755,28 @@ class TwoWheelVehicle(EV3):
         assert duration is None or duration > 0, \
             'duration needs to be positive'
 
-        t_start = Task(
-            self.start_straight,
-            args=(distance,),
-            kwargs={
-                'speed': speed,
-                'brake': brake,
-                '_controlled': True
-            },
-            duration=self._delta_time,
-            action_stop=self.stop,
-            args_stop=(False,),
-            action_cont=self.cont
+        return Task(
+                self.start_straight,
+                args=(distance,),
+                kwargs={
+                    'speed': speed,
+                    'brake': brake,
+                    '_controlled': True
+                },
+                duration=self._delta_time,
+                action_stop=self.stop,
+                args_stop=(False,),
+                action_cont=self.cont
+        ) + Periodic(
+                self._delta_time,
+                self._control_periodic,
+                duration=duration - self._delta_time,
+                action_stop=self.stop,
+                args_stop=(False,),
+                action_cont=self.cont
+                
         )
 
-        return Task(
-            t_start + Periodic(self._delta_time, self._control_periodic),
-            duration=duration
-        )
 
     def _move_motors_by(
             self,
@@ -1685,20 +1691,24 @@ class TwoWheelVehicleOld(EV3):
         assert distance is None or distance > 0, \
             "distance needs to be positive"
         t = self._Drive(
-            self._drive_straight,
-            args=(speed, distance),
-            action_stop=self._stop,
-            args_stop=(False,),
-            action_cont=self._vehicle_cont
+                self._drive_straight,
+                args=(speed, distance),
+                action_stop=self._stop,
+                args_stop=(False,),
+                action_cont=self._vehicle_cont
         )
         if distance is None:
-            return Task(t.start)
+            return t
         else:
-            t.append(
-                Repeated(self._test_pos),
+            return t.append(
+                Repeated(
+                        self._test_pos,
+                        action_stop=self._stop,
+                        args_stop=(False,),
+                        action_cont=self._vehicle_cont
+                ),
                 copy=False
             )
-            return Task(t.start, join=True)
 
     def _drive_straight(self, speed: int, distance: float) -> None:
         """starts straight movement and sets test arguments"""
@@ -1752,20 +1762,24 @@ class TwoWheelVehicleOld(EV3):
             "angle needs to be a number"
         assert angle is None or angle > 0, "angle needs to be positive"
         t = self._Drive(
-            self._drive_turn,
-            args=(speed, radius_turn, angle, right_turn),
-            action_stop=self._stop,
-            args_stop=(False,),
-            action_cont=self._vehicle_cont
+                self._drive_turn,
+                args=(speed, radius_turn, angle, right_turn),
+                action_stop=self._stop,
+                args_stop=(False,),
+                action_cont=self._vehicle_cont
         )
         if angle is None:
-            return Task(t.start)
+            return t
         else:
-            t.append(
-                Repeated(self._test_o),
+            return t.append(
+                Repeated(
+                        self._test_o,
+                        action_stop=self._stop,
+                        args_stop=(False,),
+                        action_cont=self._vehicle_cont
+                ),
                 copy=False
             )
-            return Task(t.start, join=True)
 
     def _drive_turn(
             self,
@@ -1836,7 +1850,12 @@ class TwoWheelVehicleOld(EV3):
                 args_stop=(False,),
                 action_cont=self._vehicle_cont
             ).append(
-                Repeated(self._test_o),
+                Repeated(
+                        self._test_o,
+                        action_stop=self._stop,
+                        args_stop=(False,),
+                        action_cont=self._vehicle_cont
+                ),
                 copy=False
             ).start,
             join=True
@@ -1894,26 +1913,33 @@ class TwoWheelVehicleOld(EV3):
             "speed needs to be in range [-100 - 100]"
         assert isinstance(pos_x, Number), "pos_x needs to be a number"
         assert isinstance(pos_y, Number), "pos_y needs to be a number"
-        return Task(
-            self._Drive(
+        return self._Drive(
                 self._drive_to_1,
                 args=(speed, pos_x, pos_y),
                 action_stop=self._stop,
                 args_stop=(False,),
                 action_cont=self._vehicle_cont
-            ).append(
-                Repeated(self._test_o),
-                self._Drive(
-                    self._drive_to_2,
-                    args=(speed, pos_x, pos_y),
-                    action_stop=self._stop,
-                    args_stop=(False,),
-                    action_cont=self._vehicle_cont
+        ).append(
+                Repeated(
+                        self._test_o,
+                        action_stop=self._stop,
+                        args_stop=(False,),
+                        action_cont=self._vehicle_cont
                 ),
-                Repeated(self._test_pos),
+                self._Drive(
+                        self._drive_to_2,
+                        args=(speed, pos_x, pos_y),
+                        action_stop=self._stop,
+                        args_stop=(False,),
+                        action_cont=self._vehicle_cont
+                ),
+                Repeated(
+                        self._test_pos,
+                        action_stop=self._stop,
+                        args_stop=(False,),
+                        action_cont=self._vehicle_cont
+                ),
                 copy=False
-            ).start,
-            join=True
         )
 
     def _drive_to_1(

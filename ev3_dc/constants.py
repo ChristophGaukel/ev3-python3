@@ -22,9 +22,9 @@ _SYSTEM_COMMAND_NO_REPLY = b'\x81'
 _SYSTEM_REPLY = b'\x03'
 _SYSTEM_REPLY_ERROR = b'\x05'
 
-WIFI = 'Wifi'
+WIFI = 'WiFi'
 BLUETOOTH = 'Bluetooth'
-USB = 'Usb'
+USB = 'USB'
 
 STD = 'STD'  # reply if global_mem, wait for reply
 ASYNC = 'ASYNC'  # reply if global_mem, never wait for reply
@@ -830,13 +830,15 @@ GREEN = b'\x01'
 BLUE = b'\x02'
 BLANK = b'\x03'
 
-# NXTCOLOR
-BLACKCOLOR = b'\x01'
-BLUECOLOR = b'\x02'
-GREENCOLOR = b'\x03'
-YELLOWCOLOR = b'\x04'
-REDCOLOR = b'\x05'
-WHITECOLOR = b'\x06'
+# NXTCOLOR or EV3COLOR
+NONECOLOR = 0
+BLACKCOLOR = 1
+BLUECOLOR = 2
+GREENCOLOR = 3
+YELLOWCOLOR = 4
+REDCOLOR = 5
+WHITECOLOR = 6
+BROWNCOLOR = 7
 
 # WARNING
 WARNING_TEMP = b'\x01'

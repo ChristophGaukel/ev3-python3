@@ -29,5 +29,6 @@ from .touch import Touch
 from .infrared import Infrared
 from .ultrasonic import Ultrasonic
 from .vehicle import TwoWheelVehicle
+from .color import Color
 
 from .exceptions import DirCmdError, SysCmdError

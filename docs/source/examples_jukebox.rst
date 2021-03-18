@@ -14,7 +14,7 @@ allows to use sounds and light effects parallel to other activities.
 Change Color
 ~~~~~~~~~~~~
 
-Instead of coding a direct command, like we did in
+Instead of coding a direct command, like we do in
 :ref:`changing_led_colors_label`, you can do the same thing a bit more
 comfortable.
 
@@ -173,17 +173,15 @@ MAC-address by the one of your EV3 brick, then start this program:
 
   import ev3_dc as ev3
   
-  jukebox = ev3.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
-  antemn = jukebox.song(ev3.EU_ANTEMN)
-  
-  antemn.start()
+  with ev3.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as jukebox:
+      jukebox.song(ev3.EU_ANTEMN).start()
 
 Some remarks:
 
-  - Method :py:meth:`~ev3_dc.Jukebox.song` returns a `thread_task
-    <https://thread-task.readthedocs.io/en/latest>`_ object, which can be
-    started, stopped and continued. It plays tones and changes the
-    LED-colors.
+  - Method :py:meth:`~ev3_dc.Jukebox.song` returns a `thread_task.Task
+    <https://thread-task.readthedocs.io/en/latest/api_documentation.html#task>`_
+    object, which can be started, stopped and continued. It plays
+    tones and changes the LED-colors.
   - Starting the thread task does not block the program nor does it
     block the EV3 brick. It runs in the background and allows to do
     additional things parallel.
@@ -234,17 +232,15 @@ MAC-address by the one of your EV3 brick, then start this program:
   import ev3_dc as ev3
   from thread_task import Sleep
 
-  jukebox = ev3.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
-  celebration = (
-      jukebox.song(ev3.TRIAD) +
-      Sleep(1) +
-      jukebox.song(ev3.HAPPY_BIRTHDAY) +
-      Sleep(1) +
-      jukebox.song(ev3.TRIAD)
-  )
-  
-  celebration.start()
-  
+  with ev3.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as jukebox:
+      (
+          jukebox.song(ev3.TRIAD) +
+          Sleep(1) +
+          jukebox.song(ev3.HAPPY_BIRTHDAY) +
+          Sleep(1) +
+          jukebox.song(ev3.TRIAD)
+      ).start()
+      
 The program builds a chain of tasks, which also is a `thread_task
 <https://thread-task.readthedocs.io/en/latest>`_ object. It
 demonstrates how to build tasks of growing complexity, which still
@@ -262,14 +258,12 @@ MAC-address by the one of your EV3 brick, then start this program:
   import ev3_dc as ev3
   from thread_task import Repeated
   
-  jukebox = ev3.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
-  
-  canon = Repeated(
-      jukebox.song(ev3.FRERE_JACQUES),
-      num=3
-  )
-  canon.start()
-
+  with ev3.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as jukebox:
+      Repeated(
+          jukebox.song(ev3.FRERE_JACQUES),
+          num=3
+      ).start()
+    
 Class `Repeated
 <https://thread-task.readthedocs.io/en/latest/api_documentation.html#repeated>`_
 plays the canon three times.

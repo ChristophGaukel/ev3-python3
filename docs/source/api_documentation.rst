@@ -80,9 +80,8 @@ sensor, which may be an EV3-Touch or a NXT-Touch.
 Infrared
 ~~~~~~~~
 
-Infrared is a subclass of EV3 and allows to read data from an
-infrared sensor, which may be an EV3-Infrared or a NXT-Infrared. It
-uses three modes of the infrared sensor:
+Infrared is a subclass of EV3 and allows to read data from an infrared
+sensor. It uses three modes of the infrared sensor:
 
   - *proximity* mode, which measures the distance between the
     sensor an a surface in front of the sensor.
@@ -92,6 +91,30 @@ uses three modes of the infrared sensor:
     four beacons.
 
 .. autoclass:: ev3_dc.Infrared
+   :members:
+      
+
+Ultrasonic
+~~~~~~~~~~
+
+Ultrasonic is a subclass of EV3 and allows to read data from an
+ultrasonic sensor, which may be an EV3-Ultrasonic or a
+NXT-Ultrasonic. It uses mode *EV3-Ultrasonic-Cm*
+(resp. NXT-Ultrasonic-Cm).
+
+.. autoclass:: ev3_dc.Ultrasonic
+   :members:
+      
+
+Color
+~~~~~
+
+Color is a subclass of EV3 and allows to read data from a
+color sensor, which may be an EV3-Color or a
+NXT-Color. It uses modes *EV3-Color-Reflected*, 
+(resp. *NXT-Color-Reflected*).
+
+.. autoclass:: ev3_dc.Color
    :members:
       
 

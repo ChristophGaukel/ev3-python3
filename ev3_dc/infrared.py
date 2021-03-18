@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 LEGO Mindstorms EV3 direct commands - infrared
 """
@@ -16,13 +15,8 @@ from .constants import (
     READY_RAW,
     EV3_IR
 )
-from .functions import (
-    LCX,
-    GVX
-)
-from .exceptions import (
-        DirCmdError
-)
+from .functions import LCX, GVX
+from .exceptions import SensorError
 
     
 Beacon = namedtuple('Beacon', [
@@ -83,14 +77,13 @@ class Infrared(EV3):
                 ev3_obj=ev3_obj,
                 verbosity=verbosity
         )
+
+        if self._physical_ev3._introspection is None:
+            self._physical_ev3.introspection(verbosity)
         
-        if (
-                self._physical_ev3._sensors is not None and
-                self._physical_ev3._sensors[self._port] != EV3_IR
-                
-        ):
+        if self.sensors_as_dict[self._port] != EV3_IR:
             port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-            raise DirCmdError('no EV3_IR sensor connected at ' + port_str)
+            raise SensorError('no EV3_IR sensor connected at ' + port_str)
         
     def __str__(self):
         """description of the object in a str context"""
@@ -100,14 +93,6 @@ class Infrared(EV3):
                 f'at {port_str}',
                 f'of {super().__str__()}'
         ))
-        
-    def _validate_sensor_type(self):
-        if self._physical_ev3._sensors[self._port] != EV3_IR:
-            port_str = (
-                    'PORT_' +
-                    str(1 + struct.unpack("<B", self._port)[0])
-            )
-            raise DirCmdError('no EV3_IR connected at ' + port_str)
 
     @property
     def port(self) -> bytes:
@@ -135,10 +120,11 @@ class Infrared(EV3):
     def distance(self) -> float:
         """
         distance [m], where the sensor detected something (proximity mode).
-        returned distances are between 0.01 and 1.00 m. The distance
-        1.00 m also stands for 'seen nothing'
+        returned distances are between 0.01 and 1.00 m. 
+        None stands for 'seen nothing'.
         """
-        ops_values = b''.join((
+    
+        ops = b''.join((
                 opInput_Device,  # operation
                 READY_RAW,  # CMD
                 LCX(0),  # LAYER
@@ -148,20 +134,11 @@ class Infrared(EV3):
                 LCX(1),  # VALUES
                 GVX(0)  # VALUE1 (output)
         ))
-
-        if self._physical_ev3._sensors is None:
-            ops = b''.join((
-                    self._physical_ev3._introspection_dc(offset=4),
-                    ops_values,
-            ))
-            reply = self.send_direct_cmd(ops, global_mem=20)
-            self._physical_ev3._introspection_store(reply[4:])
-            self._validate_sensor_type()
-        else:
-            self._validate_sensor_type()
-            reply = self.send_direct_cmd(ops_values, global_mem=4)
-
-        return float(struct.unpack('<i', reply[:4])[0] / 100)
+        reply = self.send_direct_cmd(ops, global_mem=4)
+        dist = struct.unpack('<i', reply)[0]
+        if dist == 100:
+            return None
+        return float(dist/ 100)
 
     @property
     def beacons(self) -> Tuple[Beacon]:
@@ -181,7 +158,8 @@ class Infrared(EV3):
         Each of them is either None or
         a namedtuple Beacon with heading and distance
         """
-        ops_values = b''.join((
+
+        ops = b''.join((
                 opInput_Device,  # operation
                 READY_RAW,  # CMD
                 LCX(0),  # LAYER
@@ -198,23 +176,11 @@ class Infrared(EV3):
                 GVX(24),  # VALUE7 - heading   channel 4
                 GVX(28)  # VALUE8 - proximity channel 4
         ))
-
-        if self._physical_ev3._sensors is None:
-            ops = b''.join((
-                    self._physical_ev3._introspection_dc(offset=32),
-                    ops_values,
-            ))
-            reply = self.send_direct_cmd(ops, global_mem=48)
-            self._physical_ev3._introspection_store(reply[32:])
-            self._validate_sensor_type()
-        else:
-            self._validate_sensor_type()
-            reply = self.send_direct_cmd(ops_values, global_mem=32)
+        reply = self.send_direct_cmd(ops, global_mem=32)
 
         values = struct.unpack('<8i', reply[:32])
         return tuple(
-                None 
-                if values[2*n + 1] == -2147483648
+                None if values[2*n + 1] == -2147483648
                 else Beacon(values[2*n], float(values[2*n + 1] / 100))
                 for n in range(4)
         )
@@ -258,8 +224,8 @@ class Infrared(EV3):
         returns a tuple of four items, each of them is either None or
         a namedtuple Beacon with heading and distance
         """
-        
-        ops_values = b''.join((
+
+        ops = b''.join((
                 opInput_Device,  # operation
                 READY_RAW,  # CMD
                 LCX(0),  # LAYER
@@ -272,18 +238,7 @@ class Infrared(EV3):
                 GVX(8),  # VALUE3 - channel 3
                 GVX(12)  # VALUE4 - channel 4
         ))
-
-        if self._physical_ev3._sensors is None:
-            ops = b''.join((
-                    self._physical_ev3._introspection_dc(offset=16),
-                    ops_values,
-            ))
-            reply = self.send_direct_cmd(ops, global_mem=32)
-            self._physical_ev3._introspection_store(reply[16:])
-            self._validate_sensor_type()
-        else:
-            self._validate_sensor_type()
-            reply = self.send_direct_cmd(ops_values, global_mem=16)
+        reply = self.send_direct_cmd(ops, global_mem=16)
 
         values = struct.unpack('<4i', reply[:16])
         result = []

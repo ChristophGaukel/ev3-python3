@@ -2,10 +2,10 @@ ev3-python3
 =============
 
 Use python3 to program your LEGO Mindstorms EV3. The program runs on the local host
-and sends direct commands to the EV3 device. It communicates via bluetooth, wifi or USB.
+and sends direct commands to the EV3 device. It communicates via bluetooth, WiFi or USB.
 I wrote a `blog <http://ev3directcommands.blogspot.com>`_ about this code.
 
-There is no need to boot the EV3 device from a SD Card or manipulate
+There is no need to boot the EV3 device from an SD Card or manipulate
 its software. You can use it as it is, the EV3 is designed to execute
 commands which come from outside.
 
@@ -85,11 +85,11 @@ continue independent tasks.
 This program plays the EU antemn. Before you can execute it, you need
 to connect both devices (the computer, that runs the program and the
 EV3 brick) with the same LAN (local area network), the EV3 brick must
-be connected via wifi. If you don't own a wifi dongle, modify the
+be connected via WiFi. If you don't own a WiFi dongle, modify the
 protocol and select ev3.BLUETOOTH or ev3.USB.
 
 Some remarks:
-  - Method song() returns a `thread_task
+  - Method song() returns a `thread_task.Task
     <https://thread_task.readthedocs.io/en/latest/>`_ object, which
     can be started, stopped and continued. It plays tones and changes
     the LED-colors.

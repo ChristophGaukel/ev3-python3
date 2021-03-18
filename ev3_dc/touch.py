@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 LEGO Mindstorms EV3 direct commands - touch
 """
@@ -16,13 +15,8 @@ from .constants import (
     NXT_TOUCH,
     EV3_TOUCH
 )
-from .functions import (
-    LCX,
-    GVX
-)
-from .exceptions import (
-        DirCmdError
-)
+from .functions import LCX, GVX
+from .exceptions import SensorError
 
 
 class Touch(EV3):
@@ -76,11 +70,24 @@ class Touch(EV3):
                 sync_mode=sync_mode,
                 verbosity=verbosity
         )
+
+        if self._physical_ev3._introspection is None:
+            self._physical_ev3.introspection(verbosity)
+        
+        if self.sensors_as_dict[self._port] not in (
+                    NXT_TOUCH,
+                    EV3_TOUCH
+        ):
+            port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
+            raise SensorError('no touch connected at ' + port_str)
         
     def __str__(self):
         """description of the object in a str context"""
-        type_str = 'EV3_TOUCH' if self.sensor_type == 16 else 'NXT_TOUCH'
-        port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
+        type_str = (
+                'EV3_TOUCH' if self.sensors_as_dict[self._port] == EV3_TOUCH 
+                else 'NXT_TOUCH'
+        )
+        port_str = 'PORT_' + str(1 + struct.unpack("B", self._port)[0])
         return ' '.join((
                 f'{type_str}',
                 f'at {port_str}',
@@ -99,19 +106,7 @@ class Touch(EV3):
         """
         type of sensor
         """
-        if self._physical_ev3._sensors is None:
-            reply = self.send_direct_cmd(
-                    self._physical_ev3._introspection_dc(),
-                    global_mem=16
-            )
-            self._physical_ev3._introspection_store(reply)
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_TOUCH,
-                    EV3_TOUCH
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack('<B', self._port)[0])
-                raise DirCmdError('no touch sensor connected at ' + port_str)
-        return self._physical_ev3._sensors[self._port]
+        return self.sensors_as_dict[self._port]
 
     @property
     def touched(self) -> bool:
@@ -119,50 +114,19 @@ class Touch(EV3):
         flag, that tells if sensor is currently touched
         """
 
-        if self._physical_ev3._sensors is None:
-            port_int = struct.unpack("<B", self._port)[0]
-            ops = b''.join((
-                    self._physical_ev3._introspection_dc(offset=4),
+        reply = self.send_direct_cmd(
+                b''.join((
                     opInput_Device,  # operation
                     READY_SI,  # CMD
                     LCX(0),  # LAYER
                     self._port,  # NO
-                    GVX(4 + port_int*2),  # TYPE (EV3-Touch or NXT-Touch)
+                    LCX(self.sensors_as_dict[self._port]),  # TYPE
                     LCX(0),  # MODE (Touch)
                     LCX(1),  # VALUES
                     GVX(0)  # VALUE1 (output)
-            ))
-            reply = self.send_direct_cmd(
-                    ops,
-                    global_mem=20
-            )
-            self._physical_ev3._introspection_store(reply[4:])
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_TOUCH,
-                    EV3_TOUCH
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-                raise DirCmdError('no touch sensor connected at ' + port_str)
-        else:
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_TOUCH,
-                    EV3_TOUCH
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-                raise DirCmdError('no touch sensor connected at ' + port_str)
-            reply = self.send_direct_cmd(
-                    b''.join((
-                        opInput_Device,  # operation
-                        READY_SI,  # CMD
-                        LCX(0),  # LAYER
-                        self._port,  # NO
-                        LCX(self._physical_ev3._sensors[self._port]),  # TYPE
-                        LCX(0),  # MODE (Touch)
-                        LCX(1),  # VALUES
-                        GVX(0)  # VALUE1 (output)
-                    )),
-                    global_mem=4
-            )
+                )),
+                global_mem=4
+        )
         touched = struct.unpack('<f', reply[:4])[0]
 
         return bool(touched)
@@ -172,50 +136,19 @@ class Touch(EV3):
         """
         number of bumps since last clearing of bump counter
         """
-        if self._physical_ev3._sensors is None:
-            port_int = struct.unpack("<B", self._port)[0]
-            ops = b''.join((
-                    self._physical_ev3._introspection_dc(offset=4),
+        reply = self.send_direct_cmd(
+                b''.join((
                     opInput_Device,  # operation
                     READY_SI,  # CMD
                     LCX(0),  # LAYER
                     self._port,  # NO
-                    GVX(4 + port_int*2),  # TYPE (EV3-Touch or NXT-Touch)
+                    LCX(self.sensors_as_dict[self._port]),  # TYPE
                     LCX(1),  # MODE (Touch)
                     LCX(1),  # VALUES
                     GVX(0)  # VALUE1 (output)
-            ))
-            reply = self.send_direct_cmd(
-                    ops,
-                    global_mem=20
-            )
-            self._physical_ev3._introspection_store(reply[4:])
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_TOUCH,
-                    EV3_TOUCH
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-                raise DirCmdError('no touch sensor connected at ' + port_str)
-        else:
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_TOUCH,
-                    EV3_TOUCH
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-                raise DirCmdError('no touch sensor connected at ' + port_str)
-            reply = self.send_direct_cmd(
-                    b''.join((
-                        opInput_Device,  # operation
-                        READY_SI,  # CMD
-                        LCX(0),  # LAYER
-                        self._port,  # NO
-                        LCX(self._physical_ev3._sensors[self._port]),  # TYPE
-                        LCX(1),  # MODE (Touch)
-                        LCX(1),  # VALUES
-                        GVX(0)  # VALUE1 (output)
-                    )),
-                    global_mem=4
-            )
+                )),
+                global_mem=4
+        )
         bumps = struct.unpack('<f', reply[:4])[0]
         
         return int(bumps)
@@ -232,38 +165,12 @@ class Touch(EV3):
         """
         clears bump counter of touch sensor
         """
-        if self._physical_ev3._sensors is None:
-            ops = b''.join((
-                    self._physical_ev3._introspection_dc(),
+        self.send_direct_cmd(
+                b''.join((
                     opInput_Device,  # operation
                     CLR_CHANGES,  # CMD
                     LCX(0),  # LAYER
                     self._port  # NO
-            ))
-            reply = self.send_direct_cmd(
-                    ops,
-                    global_mem=16
-            )
-            self._physical_ev3._introspection_store(reply)
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_TOUCH,
-                    EV3_TOUCH
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-                raise DirCmdError('no touch sensor connected at ' + port_str)
-        else:
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_TOUCH,
-                    EV3_TOUCH
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-                raise DirCmdError('no touch sensor connected at ' + port_str)
-            self.send_direct_cmd(
-                    b''.join((
-                        opInput_Device,  # operation
-                        CLR_CHANGES,  # CMD
-                        LCX(0),  # LAYER
-                        self._port  # NO
-                    ))
-             )
+                ))
+         )
  

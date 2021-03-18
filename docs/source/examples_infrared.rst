@@ -37,8 +37,13 @@ with PORT 2, then start this program.
           protocol=ev3.WIFI,
           host='00:16:53:42:2B:99'
   )
+
+  dist = my_infrared.distance
+  if dist:
+      print(f'distance: {my_infrared.distance:3.2f} m')
+  else:
+      print('seen nothing')
   
-  print(f'distance: {my_infrared.distance:3.2f} m')    
   
 Some remarks:
 
@@ -47,11 +52,9 @@ Some remarks:
   - Run the program multiple times with different surfaces and distances.
   - Test what happens, when no sensor is connected to PORT 2.
   - Test what happens, when another sensor type is connected to PORT 2.
-  - Test with distances larger than 1.00 m. You will realize, that
-    value *1.00 m* stands for *nothing closer than 1.00 m*.
-  - If your program references the measured distance more than once,
-    then define a variable to store it. Every time, you refrence
-    attribute :py:attr:`~ev3_dc.Infrared.distance`, you again start a
+  - Test with distances larger than 1.00 m.
+  - Every time, you refrence attribute
+    :py:attr:`~ev3_dc.Infrared.distance`, you again start a
     communication between your program and the EV3 device.
   - Switch on verbosity by setting attribute
     :py:attr:`~ev3_dc.Infrared.verbosity` to value 1 and you will see

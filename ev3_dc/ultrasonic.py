@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 LEGO Mindstorms EV3 direct commands - ultrasonic
 """
@@ -15,13 +14,8 @@ from .constants import (
     NXT_ULTRASONIC,
     EV3_ULTRASONIC
 )
-from .functions import (
-    LCX,
-    GVX
-)
-from .exceptions import (
-        DirCmdError
-)
+from .functions import LCX, GVX
+from .exceptions import SensorError
 
 
 class Ultrasonic(EV3):
@@ -65,17 +59,16 @@ class Ultrasonic(EV3):
                 ev3_obj=ev3_obj,
                 verbosity=verbosity
         )
+
+        if self._physical_ev3._introspection is None:
+            self._physical_ev3.introspection(verbosity)
         
-        if (
-                self._physical_ev3._sensors is not None and
-                self._physical_ev3._sensors[self._port] not in (
-                        NXT_ULTRASONIC,
-                        EV3_ULTRASONIC
-                )
-                
+        if self.sensors_as_dict[self._port] not in (
+                NXT_ULTRASONIC,
+                EV3_ULTRASONIC
         ):
             port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-            raise DirCmdError('no ultrasonic connected at ' + port_str)
+            raise SensorError('no ultrasonic connected at ' + port_str)
         
     def __str__(self):
         """description of the object in a str context"""
@@ -103,72 +96,30 @@ class Ultrasonic(EV3):
         """
         type of sensor
         """
-        if self._physical_ev3._sensors is None:
-            reply = self.send_direct_cmd(
-                    self._physical_ev3._introspection_dc(),
-                    global_mem=16
-            )
-            self._physical_ev3._introspection_store(reply)
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_ULTRASONIC,
-                    EV3_ULTRASONIC
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack('<B', self._port)[0])
-                raise DirCmdError('no ultrasonic connected at ' + port_str)
-        return self._physical_ev3._sensors[self._port]
+        return self.sensors_as_dict[self._port]
 
     @property
     def distance(self) -> float:
         """
-        distance [m], where the sensor detected something
+        distance [m] ahead, where the sensor detected something
         
-        distances are between 0.01 and 2.55 m. The distance
-        2.55 m also stands for 'seen nothing'
+        distances are between 0.01 and 2.55 m. None stands for 'seen nothing'
         """
 
-        if self._physical_ev3._sensors is None:
-            port_int = struct.unpack("<B", self._port)[0]
-            ops = b''.join((
-                    self._physical_ev3._introspection_dc(offset=4),
+        reply = self.send_direct_cmd(
+                b''.join((
                     opInput_Device,  # operation
                     READY_RAW,  # CMD
                     LCX(0),  # LAYER
                     self._port,  # NO
-                    GVX(4 + port_int*2),  # TYPE
+                    LCX(5),  # TYPE
                     LCX(0),  # MODE (cm)
                     LCX(1),  # VALUES
                     GVX(0)  # VALUE1 (output)
-            ))
-            reply = self.send_direct_cmd(
-                    ops,
-                    global_mem=20
-            )
-            self._physical_ev3._introspection_store(reply[4:])
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_ULTRASONIC,
-                    EV3_ULTRASONIC
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-                raise DirCmdError('no ultrasonic connected at ' + port_str)
-        else:
-            if self._physical_ev3._sensors[self._port] not in (
-                    NXT_ULTRASONIC,
-                    EV3_ULTRASONIC
-            ):
-                port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
-                raise DirCmdError('no ultrasonic connected at ' + port_str)
-            reply = self.send_direct_cmd(
-                    b''.join((
-                        opInput_Device,  # operation
-                        READY_RAW,  # CMD
-                        LCX(0),  # LAYER
-                        self._port,  # NO
-                        LCX(5),  # TYPE
-                        LCX(0),  # MODE (cm)
-                        LCX(1),  # VALUES
-                        GVX(0)  # VALUE1 (output)
-                    )),
-                    global_mem=4
-            )
-
-        return float(struct.unpack('<i', reply[:4])[0] / 100)
+                )),
+                global_mem=4
+        )
+        dist = struct.unpack('<i', reply)[0]
+        if dist == 255:
+            return None
+        return float(dist/ 100)

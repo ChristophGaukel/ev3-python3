@@ -4,28 +4,27 @@ LEGO EV3 direct commands - functions
 '''
 
 import struct
-from numbers import Integral
-from .constants import PORT_A, PORT_B, PORT_C
+from .constants import PORT_A, PORT_B, PORT_C, PORT_D
 
 
-def LCX(value: Integral) -> bytes:
+def LCX(value: int) -> bytes:
     """
     create a LC0, LC1, LC2, LC4, dependent from the value
 
     Positional Argument
       value
-        interger value as argument of a direct command
+        integer value as argument of a direct command
     """
-    assert isinstance(value, Integral), \
+    assert isinstance(value, int), \
         "value needs to be an integer"
 
-    if value >= -32 and value < 0:
+    if -32 <= value < 0:
         return struct.pack('b', 0x3F & (value + 64))
-    if value >= 0 and value < 32:
+    if 0 <= value < 32:
         return struct.pack('b', value)
-    if value >= -127 and value <= 127:
+    if -127 <= value <= 127:
         return b'\x81' + struct.pack('<b', value)
-    if value >= -32767 and value <= 32767:
+    if -32767 <= value <= 32767:
         return b'\x82' + struct.pack('<h', value)
     return b'\x83' + struct.pack('<i', value)
 
@@ -44,7 +43,7 @@ def LCS(value: str) -> bytes:
     return b'\x84' + str.encode(value) + b'\x00'
 
 
-def LVX(value: Integral) -> bytes:
+def LVX(value: int) -> bytes:
     """
     create a LV0, LV1, LV2, LV4, dependent from the value
 
@@ -52,7 +51,7 @@ def LVX(value: Integral) -> bytes:
       value
         position (bytes address) in the local memory
     """
-    assert isinstance(value, Integral), \
+    assert isinstance(value, int), \
         "value needs to be an integer"
     assert value >= 0, 'No negative values allowed'
 
@@ -65,7 +64,7 @@ def LVX(value: Integral) -> bytes:
     return b'\xc3' + struct.pack('<i', value)
 
 
-def GVX(value: Integral) -> bytes:
+def GVX(value: int) -> bytes:
     """
     create a GV0, GV1, GV2, GV4, dependent from the value
 
@@ -73,7 +72,7 @@ def GVX(value: Integral) -> bytes:
       value
         position (bytes address) in the global memory
     """
-    assert isinstance(value, Integral), \
+    assert isinstance(value, int), \
         "value needs to be an integer"
     assert value >= 0, 'No negative values allowed'
 
@@ -86,7 +85,7 @@ def GVX(value: Integral) -> bytes:
     return b'\xe3' + struct.pack('<i', value)
 
 
-def port_motor_input(port_output: Integral) -> bytes:
+def port_motor_input(port_output: int) -> bytes:
     """
     get corresponding input motor port (from output motor port)
 
@@ -94,9 +93,9 @@ def port_motor_input(port_output: Integral) -> bytes:
       port_output
         motor port number
     """
-    assert isinstance(port_output, Integral), \
+    assert isinstance(port_output, int), \
         "port_output needs to be an integer"
-    assert port_output in (1, 2, 4, 8), \
+    assert port_output in (PORT_A, PORT_B, PORT_C, PORT_D), \
         "port_output needs to be one of the numbers 1, 2, 4, 8"
 
     if port_output == PORT_A:

@@ -1,64 +1,744 @@
----
++++
 EV3
----
++++
 
-Class :py:class:`~ev3_dc.EV3` is the base class of ev3_dc. For using
-it, you need to know some details of direct commands. The constructor
-of EV3 establishes a connection between your computer and your EV3
-brick.  The most interesting method is
-:py:meth:`~ev3_dc.EV3.send_direct_cmd`, which sends a bytestring to
-your EV3 brick. If this bytestring is well formed, your EV3 brick will
-understand and execute its operations. If the bytestring requested it,
-the EV3 brick will answer the direct command with some data.
+Class :py:class:`~ev3_dc.EV3` is the base class of ev3_dc. The
+constructor of EV3 establishes a connection between your computer and
+your EV3 brick. Its properties allow to get some information about the
+EV3's state. A few of them allow to change its behaviour. But the
+power of this class comes from its methods
+:py:meth:`~ev3_dc.EV3.send_direct_cmd` and
+:py:meth:`~ev3_dc.EV3.send_system_cmd` which send bytestrings to your
+EV3 brick. If these bytestrings are well formed, your EV3 brick will
+understand and execute their operations. If a bytestring requests it,
+the EV3 brick answers with another bytestring, which contains the
+return data. For using these methods, you need to know the details of
+direct and system commands.
 
-Document `EV3 Firmware Developer Kit
-<https://www.lego.com/cdn/cs/set/assets/blt77bd61c3ac436ea3/LEGO_MINDSTORMS_EV3_Firmware_Developer_Kit.pdf>`_
-is the reference book of LEGO EV3 direct commands and will help
-you.
+To establish a connection is a requirement for using class *EV3*. This
+is, what the next section deals with.
 
+.. _connect_with_device:
 
-The art of doing nothing
-~~~~~~~~~~~~~~~~~~~~~~~~
+Connect with the EV3 device
+---------------------------
 
-We send the idle operation of the EV3 device to test the connection.
+We test all three connection protocols, which the EV3 device
+provides. If you don't own a WiFi dongle, you still can use *USB* and
+*Bluetooth*.
 
 USB
-...
+~~~
 
-Two steps for preparation:
+Some steps for preparation:
 
   - Note the `MAC-address <https://en.wikipedia.org/wiki/MAC_address>`_ of your EV3 device,
     you can read it from your EV3's display under Brick Info / ID.
   - Take an USB cable and connect your EV3 device (the 2.0 Mini-B
     port, titled PC) with your computer.
+  - On Windows systems, USB works if libusb is installed with a driver
+    for EV3 devices. Follow this `instruction
+    <https://www.smallcab.net/download/programme/xm-07/how-to-install-libusb-driver.pdf>`_
+    and replace *Xin-Mo Programmer* by *EV3* (when I did it, I clicked
+    the *Install Now* button in the Inf-Wizard and it was successfully
+    installing).
+  - On Linux sytems make shure, you have the permission to connect the EV3 device. In
+    my case, I had to add this udev-rule as file */etc/udev/rules.d/90-legoev3.rules*:
 
-Then modify the following program. Replace the MAC-address
+    .. code:: none
+
+      ATTRS{idVendor}=="0694",ATTRS{idProduct}=="0005",MODE="0666",GROUP="christoph"
+
+Then modify the following program. Replace MAC-address
 ``00:16:53:42:2B:99`` with the one of your EV3 device (it must be the
-colon-separated format), then run the program.
+colon-separated format) and run the program.
 
 .. code:: python3
 
   import ev3_dc as ev3
-  
-  my_ev3 = ev3.EV3(
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
-  )
-  my_ev3.verbosity = 1
-  my_ev3.sync_mode = ev3.SYNC
-  ops = ev3.opNop
-  my_ev3.send_direct_cmd(ops)
+
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_robot:
+      print(my_robot)
 
 If everything is o.k., you will see an output like:
 
 .. code-block:: none
 
-  10:44:21.205319 Sent 0x|06:00|2A:00|00|00:00|01|
-  10:44:21.214859 Recv 0x|03:00|2A:00|02|
+  USB connected EV3 00:16:53:42:2B:99 (Hugo)
+
+Protocol *USB* and MAC-address *00:16:53:42:2B:99* were given to the
+constructor of class *EV3* as keyword arguments. But this program also
+knows the name of my EV3 device. This needs a communication between
+the program an the EV3 device. Therefore the result undoubtly
+documents, the connection was successfully established.
+
+
+Bluetooth
+~~~~~~~~~
+
+On Windows systems, Bluetooth works from Python 3.9 upwards. This
+says: your operating system can't be Windows 7 or earlier.  Maybe you
+need to install a newer python3 version. This can be done from `Python
+Releases for Windows <https://www.python.org/downloads/windows/>`_.
+
+On Linux systems, Bluetooth AutoEnable needs to be deactivated. I (my
+computer has an Ubuntu 20.10 operating system) had to comment out the
+last line in file */etc/bluetooth/main.conf* (which needs superuser
+access rights):
+
+.. code:: none
+
+  # AutoEnable defines option to enable all controllers when they are found.
+  # This includes adapters present on start as well as adapters that are plugged
+  # in later on. Defaults to 'false'.
+  # AutoEnable=true
+
+
+`Couple
+<https://nrca.zendesk.com/hc/en-us/articles/115002669503-Bluetooth-How-to-connect-the-EV3-Robot-to-your-PC-Computer-by-wireless-Bluetooth>`_
+(only steps 1 - 12) your computer and your EV3 device via Bluetooth
+and call the EV3 constructor with **protocol=ev3.BLUETOOTH**. This
+says: again replace MAC-address ``00:16:53:42:2B:99`` with the one
+of your EV3, then run this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_robot:
+      print(my_robot)
+
+My output was:
+
+.. code:: none
+
+  Bluetooth connected EV3 00:16:53:42:2B:99 (Hugo)
+
+Hopefully, you will see something similar. If so, your Bluetooth
+connection works.
+
+
+WiFi
+~~~~
+
+If you own a WiFi dongle, you can `connect
+<https://de.mathworks.com/help/supportpkg/legomindstormsev3io/ug/connect-to-an-ev3-brick-over-wifi.html>`_
+(only steps 1 - 12) your EV3 device via WiFi with your local
+network. If your computer also is connected (either via WiFi or via
+Ethernet), they can communicate. If these conditions are fulfilled,
+you can call the EV3 constructor with **protocol=ev3.WIFI**. Replace
+MAC-address ``00:16:53:42:2B:99`` with the one of your EV3, then start
+this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.WIFI, host='00:16:53:42:2B:99') as my_robot:
+      print(my_robot)
+
+As you may have expected, my program's output was:
+
+.. code:: none
+
+  WiFi connected EV3 00:16:53:42:2B:99 (Hugo) 
+
+I hope you can connect at least one protocol, if it's really only one
+and this is *USB*, you have no wireless connection, which is a
+restriction. If you have more than one option, you are lucky. *USB* is
+fast connected and fast in data transfer. When you start your EV3
+device, *USB* is ready without any coupling. I prefer it for
+developping.
+
+  
+EV3's properties
+----------------
+
+The properties of class :py:class:`~ev3_dc.EV3` provide easy access to
+the state of the EV3 device. They e.g. describe the battery status,
+the free memory space or the connected sensors and motors. I will
+present some short programs to show their usage.
+
+A few of the properties also allow to change the state of the EV3
+device, you can e.g. easily change the sound volume or the EV3's name.
+
+
+name
+~~~~
+
+Property :py:attr:`~ev3_dc.EV3.name` allows to read and change the
+name of the EV3 device. This is the one, you see in the first line of
+your EV3's display, which you can change under menu item *Brick
+Name*. Replace MAC-address ``00:16:53:42:2B:99`` with the one of
+your EV3 device and select the protocol you prefer, then start this
+program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      print('This is', my_ev3.name)
+
+My program's output was:
+
+.. code-block:: none
+
+  This is Hugo
+
+Now let's change the name of the EV3 device with this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      my_ev3.name = 'Evelyn'
+
+Control your EV3's display, if the name really did change.
+
+
+sleep
+~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.sleep` allows to read and change the
+timespan (in minutes), the EV3 waits in idle state before it
+automatically shuts down. You can change this timespan under menu item
+**Sleep**. Your display allows the following values: *2 min.*, *5
+min.*, *10 min.*, *30 min.*, *60 min.* and *never*.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of
+your EV3 device and select the protocol you prefer, then start this
+program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      print(f'Currently sleep is set to {my_ev3.sleep} min.')
+
+My program's output was:
+
+.. code-block:: none
+
+  Currently sleep is set to 30 min.
+
+We change the sleeping time of the EV3 device with this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      my_ev3.sleep = 12
+
+Your EV3 device accepts all values from 0 to 120, but your EV3's
+display will not present them correctly and is blocked for any further
+changes of the sleeping time. Therefore change it once again to one of
+the above mentioned values (*never* is value 0).
+
+
+volume
+~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.volume` allows to read and change the
+sound volume. You can also change the sound volume under menu item
+**Volume**. Your display allows the following values: *0 %*, *10 %*,
+*20 %*, ..., *100 %*.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of
+your EV3 device and select the protocol you prefer, then start this
+program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      print(f'Currently the sound volume is set to {my_ev3.volume} %')
+
+My program's output was:
+
+.. code-block:: none
+
+  Currently the sound volume is set to 10 %.
+
+We change the sound volume of the EV3 device with this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      my_ev3.volume = 18
+
+Your EV3 device accepts all values from 0 to 100, but your EV3's
+display will not present all of them correctly and will be partly
+blocked. Therefore change it once again to one of the above mentioned
+values.
+
+
+battery
+~~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.battery` allows to get informations
+about the EV3's battery state. You get its voltage, its current and
+its state of charge.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      print(my_ev3.battery)
+
+My program's output was:
+
+.. code-block:: none
+
+  Battery(voltage=7.123220920562744, current=0.19781701266765594, percentage=5)
+
+The voltage is in `Volt <https://en.wikipedia.org/wiki/Volt>`_, the
+current in `Ampère <https://en.wikipedia.org/wiki/Ampere>`_. You can
+also access the single values:
+
+.. code-block:: python3
+
+  import ev3_dc as ev3
+  
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      bat = my_ev3.battery
+      print(f'the power consumption is {bat.voltage * bat.current:4.2f} Watt')
+
+Don't code ``{my_ev3.battery.voltage * my_ev3.battery.current:4.2f}``,
+this would result in two request-reply-cycles, because the battery
+state is requested again whenever you reference property *battery*.
+
+My program's output was:
+
+.. code-block:: none
+
+  the power consumption is 1.44 Watt
+
+Maybe you like to recalculate the power consumption, when some motors
+are running. The value above is without motor movement and is typical
+for `ARM architecture
+<https://en.wikipedia.org/wiki/ARM_architecture>`_ computers.
+
+
+sensors
+~~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.sensors` informs about the sensor types
+(motors also are sensors), which are connected to the EV3 brick.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      print(my_ev3.sensors)
+
+My program's output was:
+
+.. code-block:: none
+
+  Sensors(Port_1=16, Port_2=33, Port_3=5, Port_4=1, Port_A=7, Port_B=8, Port_C=None, Port_D=7)
+
+Read chapter 5 *Device type list* of document `EV3 Firmware Developer
+Kit
+<https://www.lego.com/cdn/cs/set/assets/blt77bd61c3ac436ea3/LEGO_MINDSTORMS_EV3_Firmware_Developer_Kit.pdf>`_,
+which lists the EV3 sensors. Each sensor is identified by an integer
+number:
+
+    - NXT_TOUCH = 1
+    - NXT_LIGHT = 2
+    - NXT_SOUND = 3
+    - NXT_COLOR = 4
+    - NXT_ULTRASONIC = 5
+    - NXT_TEMPERATURE = 6
+    - EV3_LARGE_MOTOR = 7
+    - EV3_MEDIUM_MOTOR = 8
+    - EV3_TOUCH = 16
+    - EV3_COLOR = 29
+    - EV3_ULTRASONIC = 30
+    - EV3_GYRO = 32
+    - EV3_IR = 33
+
+Your EV3 brick names its sensor ports by numbers 1 to 4 and its motor
+ports by characters A to D.
+
+
+sensors_as_dict
+~~~~~~~~~~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.sensors_as_dict` provides the same information as property *sensors* but
+presents it in a form, which supports automatic handling.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      sensors = my_ev3.sensors_as_dict
+  
+      assert sensors[ev3.PORT_1] == ev3.EV3_TOUCH, \
+        'no EV3 touch connected at port 1'
+      assert sensors[ev3.PORT_2] == ev3.EV3_IR, \
+        'no EV3 infrared connected at port 2'
+      assert sensors[ev3.PORT_3] == ev3.NXT_ULTRASONIC, \
+        'no NXT ultrasonic connected at port 3'
+      assert sensors[ev3.PORT_4] == ev3.NXT_TOUCH, \
+        'no NXT touch connected at port 4'
+      assert sensors[ev3.PORT_A_SENSOR] == ev3.EV3_LARGE_MOTOR, \
+        'no large motor connected at port A'
+      assert sensors[ev3.PORT_B_SENSOR] == ev3.EV3_MEDIUM_MOTOR, \
+        'no medium motor connected at port B'
+      assert sensors[ev3.PORT_D_SENSOR] == ev3.EV3_LARGE_MOTOR, \
+        'no large motor connected at port D'
+  
+      print('everything is as expected')
 
 Some remarks:
 
-  - Both lines start with a timestamp.
+  - Adapt this program to your connected sensor combination.
+  - Using constants for the ports and sensors helps for readability.
+  - Motors can be addressed as sensors or as motors, this is why we
+    use two different constants for the sensor context and the
+    movement context. If you use a motor as sensor, address it
+    by e.g. constant PORT_A_SENSOR.
+
+
+system
+~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.system` tells some informations about
+the EV3's operating system version, firmware version and hardware
+version. Operating system and firmware additionally know their build
+numbers.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99') as my_ev3:
+      print(my_ev3.system)
+
+My program's output was:
+
+.. code-block:: none
+
+  System(os_version='Linux 2.6.33-rc', os_build='1212131117', fw_version='V1.09H', fw_build='1512030906', hw_version='V0.60')
+
+The operating system is Linux, which runs a lot of devices like smart
+TVs, routers, etc. On my EV3 device, the `Linux version
+<https://en.wikipedia.org/wiki/Linux_kernel_version_history>`_ is 2,
+the major revision is 6, the minor revision is 33 and it's a *release
+candidate*. This says, it stems from a time before 24 February 2010.
+If you need it more precisely, you also get the build number of the
+operating system version.
+
+The firmware is the software, which LEGO® developped, it allows to
+e.g. control the display, communicate with sensors and motors or run
+programs. My EV3 has been updated to version V1.09H and its hardware
+version is V0.60.
+
+
+network
+~~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.network` allows to get informations
+about the WiFi connection of the EV3 device. Therefore it only works
+if the connection protocol is *WIFI*.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, connect your EV3 device via WiFi with your local network, then
+start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.WIFI, host='00:16:53:42:2B:99') as my_ev3:
+      print(my_ev3.network)
+
+My program's output was:
+
+.. code-block:: none
+
+  Network(name='NetOfTheSix', ip_adr='192.168.178.35', mac_adr='44:49:94:4F:FC:C2')
+
+This says:
+
+  - The name of the `WiFi network
+    <https://en.wikipedia.org/wiki/Wireless_LAN>`_ is *NetOfTheSix*,
+    which must operate on 2.4 GHz (the EV3 device does not support 5
+    GHz WiFi).
+  - In this network, my EV3 device got the `IPv4 address
+    <https://en.wikipedia.org/wiki/IPv4>`_ *192.168.178.35*.
+  - My WiFi dongle (this is the device, which connects to the network)
+    has the mac-address *44:49:94:4F:FC:C2*, which is different from
+    the mac-address of the EV3 device.
+
+If you prefer to access the single values directly, then do:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  with ev3.EV3(protocol=ev3.WIFI, host='00:16:53:42:2B:99') as my_ev3:
+      print(f'name of the network:        {my_ev3.network.name}')
+      print(f'ip_adr of the EV3 device:   {my_ev3.network.ip_adr}')
+      print(f'mac_adr of the WiFi dongle: {my_ev3.network.mac_adr}')
+
+This program's output was:
+
+.. code-block:: none
+
+  name of the network:        NetOfTheSix
+  ip_adr of the EV3 device:   192.168.178.35
+  mac_adr of the WiFi dongle: 44:49:94:4F:FC:C2
+
+
+memory
+~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.memory` informs about EV3's memory
+space. 
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      print(f'{my_ev3.memory.free} of {my_ev3.memory.total} kB memory are free')
+
+My program's output was:
+
+.. code-block:: none
+
+  4572 of 6000 kB memory are free
+
+This says, 6 MB is the total user memory space of my EV3 device, which
+seems to be small, but is large enough for the things I really do on
+this device.
+		
+
+protocol
+~~~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.protocol` tells the protocol type of
+the EV3's connection. This sounds weird because we explicitly set it,
+when we create an EV3 instance and we can't change it. But think of
+the situation, when you call a function or method, which you did not
+code and it returns an EV3 instance. Maybe you want to know, how this
+instance is connected.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      print(f'this EV3 device is connected via {my_ev3.protocol}')
+
+This program's output:
+
+.. code:: none
+
+  this EV3 device is connected via USB
+
+
+host
+~~~~
+
+Property :py:attr:`~ev3_dc.EV3.host` tells the `MAC-address
+<https://en.wikipedia.org/wiki/MAC_address>`_ of the EV3 device. As
+above this is thought for EV3 instances, you got from somewhere.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      print(f'{my_ev3.host} is the MAC-address of this EV3 device')
+
+This program's output:
+
+.. code:: none
+
+  00:16:53:42:2B:99 is the MAC-address of this EV3 device
+
+
+verbosity
+~~~~~~~~~
+
+Setting property :py:attr:`~ev3_dc.EV3.verbosity` to a value greater
+than zero allows to see the communication data between the program and
+the connected EV3 device.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      my_ev3.verbosity = 1
+      bat = my_ev3.battery
+
+This program's output:
+
+.. code:: none
+
+  19:45:30.891798 Sent 0x|0E:00|2A:00|00|09:00|81:01:60:81:02:64:81:12:68|
+  19:45:30.898732 Recv 0x|0C:00|2A:00|02|7C:03:F1:40:40:07:3B:3E:64|
+
+Some remarks:
+
+  - Referencing the battery property by ``bat = my_ev3.battery`` initiates
+    a request-response-cycle which asks for the current state of the battery and
+    gets some data back.
+  - Easy to understand are the timestamps. Between the request and the
+    response lies a timespan of 7 ms.
+  - The request and response themselves are quite cryptic! If you want
+    to understand them, read section :ref:`direct_commands_label`
+
+
+sync_mode
+~~~~~~~~~
+
+Property :py:attr:`~ev3_dc.EV3.sync_mode` has a very special meaning
+for direct commands. It influences the way, how requests are
+handled. If its value is *SYNC*, then all requests will be answered
+and the calling program will always wait until the response did
+arrive, even if the direct command does not return any data. If its
+value is *ASYNC*, then method :py:meth:`~ev3_dc.EV3.send_direct_cmd`
+never will wait until a response comes back. Instead it will return
+the message counter and it is the responsibility of the programmer to
+call method :py:meth:`~ev3_dc.EV3.wait_for_reply`. This allows to
+continue with processing until the response is needed and then
+wait and get it. The third value *STD* will only wait for replies, if the direct
+command returns data.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, select the protocol you prefer, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      print(f"protocol USB's default sync_mode is {my_ev3.sync_mode}")
+      my_ev3.name = 'Evelyn'
+      my_ev3.verbosity = 1
+      my_ev3.name = 'Hugo'
+  
+This program's output:
+
+.. code:: none
+
+  protocol USB's default sync_mode is SYNC
+  19:28:11.184508 Sent 0x|0D:00|2B:00|00|00:00|D4:08:84:48:75:67:6F:00|
+  19:28:11.193370 Recv 0x|03:00|2B:00|02|
+
+Protocol *USB* is that fast, that sometimes the EV3 device is not able
+to handle all direct commands correctly. *sync_mode = SYNC*
+guaranties, that each direct command has finished, before the next one
+is sent. Therefore protol *USB's* default snc_mode is *SYNC*.
+
+The direct command, which changes EV3's name does not reply anything,
+but our program had to wait about 9 ms until the response did arrive.
+
+sync_mode *SYNC's* 2nd advantage is, that errors can't occur
+silently. Every direct command replies and every reply contains the
+return code of the direct command.
+
+Now let's change the program and explicitly set *sync_mode = STD*:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      print(f"protocol USB's default sync_mode is {my_ev3.sync_mode}")
+      my_ev3.name = 'Evelyn'
+      my_ev3.sync_mode = ev3.STD
+      my_ev3.verbosity = 1
+      my_ev3.name = 'Hugo'
+  
+This program's output:
+
+.. code:: none
+
+  protocol USB's default sync_mode is SYNC
+  19:34:35.935427 Sent 0x|0D:00|2B:00|80|00:00|D4:08:84:48:75:67:6F:00|
+
+With *sync_mode = STD*, the EV3 device does not reply this direct
+command.
+  
+.. _direct_commands_label:
+
+Direct commands
+---------------
+
+Document `EV3 Firmware Developer Kit
+<https://www.lego.com/cdn/cs/set/assets/blt77bd61c3ac436ea3/LEGO_MINDSTORMS_EV3_Firmware_Developer_Kit.pdf>`_
+is the reference book of LEGO EV3 direct commands and will help
+you to understand the details.
+
+
+The art of doing nothing
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+We send the idle operation of the EV3 device to test the communication speed.
+
+Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
+device, then run this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+
+  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+      my_ev3.verbosity = 1
+      my_ev3.sync_mode = ev3.SYNC
+      ops = ev3.opNop
+      my_ev3.send_direct_cmd(ops)
+  
+If everything is o.k., you will see an output like:
+
+.. code-block:: none
+
+  20:09:32.162156 Sent 0x|06:00|2A:00|00|00:00|01|
+  20:09:32.168082 Recv 0x|03:00|2A:00|02|
+
+Some remarks:
+
+  - Both lines start with a timestamp. A bit shorter than 6 ms was the
+    timespan of this request-reply-cycle.
   - The first line shows the sent data in a binary format. We separate
     bytes by colons ":" or vertical bars "|". Vertical bars separate
     these groups of bytes:
@@ -71,11 +751,11 @@ Some remarks:
       0x|06:00| therefore stands for the value 6.
       
     - **Message counter** (bytes 2, 3): This is the footprint of the
-      direct command. The message counter is included in the
-      answer and allows to match the direct command and its
-      reply. This too is a 2-byte unsigned integer in little endian
-      format. The EV3 class starts counting with 0x|2A:00|, which is
-      the value 42.
+      direct command. The message counter will be included in the
+      corresponding reply and allows to match the direct command and
+      its reply. This too is a 2-byte unsigned integer in little
+      endian format. The EV3 class starts counting with 0x|2A:00|,
+      which is the value 42.
       
     - **Message type** (byte 4): For direct commands it may have the
       following two values:
@@ -83,8 +763,8 @@ Some remarks:
       - DIRECT_COMMAND_REPLY = 0x|00|
       - DIRECT_COMMAND_NO_REPLY = 0x|80|
 
-      In our case we set sync_mode=SYNC, which means we want
-      the EV3 to reply all messages.
+      In our case we did set sync_mode=SYNC, which means: we want the
+      EV3 to reply all messages.
 
     - **Header** (bytes 5, 6): These two bytes, the last in front of
       the first operation are the header. It includes a combination of
@@ -115,42 +795,11 @@ If we had set the global memory to a value larger than 0 (e.g. calling
 ``global_mem=1``, we would have seen some additional data after the
 return status.
 
-
-Bluetooth
-.........
-
-Remove the USB-cable, `couple
-<https://nrca.zendesk.com/hc/en-us/articles/115002669503-Bluetooth-How-to-connect-the-EV3-Robot-to-your-PC-Computer-by-wireless-Bluetooth>`_
-(only steps 1 - 12) your computer and your EV3 device via Bluetooth,
-then modify your program by replacing ev3.USB by **ev3.BLUETOOTH**:
-
-.. code:: python3
-
-  import ev3_dc as ev3
-  
-  my_ev3 = ev3.EV3(
-      protocol=ev3.BLUETOOTH,
-      host='00:16:53:42:2B:99'
-  )
-  my_ev3.verbosity = 1
-  my_ev3.sync_mode = ev3.SYNC
-  ops = ev3.opNop
-  my_ev3.send_direct_cmd(ops)
-
-You will see a similar output, but the timespan between request and
-reply will be longer, because the Bluetooth-connection is slower than
-the USB-connection.
-
-
-Wifi
-....
-
-If you own a Wifi dongle, you can `connect
-<https://de.mathworks.com/help/supportpkg/legomindstormsev3io/ug/connect-to-an-ev3-brick-over-wifi.html>`_
-(only steps 1 - 12) your computer with your EV3 device via
-Wifi. Replace the protocol by **ev3.WIFI** and start the program
-again. Your output will show you a communication speed somewhere
-between USB and BLUETOOTH.
+Replace the protocol by **ev3.WIFI** and **ev3.BLUETOOTH** and start
+the program again. The time gaps between request and reply will show
+the communication speeds. USB is the fastest, then comes WIFI,
+BLUETOOTH is the slowest. Compared with human communication, all three
+of them are quite fast.
 
 
 Tell your EV3 what to do
@@ -288,11 +937,11 @@ Some remarks:
   - 0x|6D:79:45:56:33| is the ascii bytecode of the string *myEV3*.
   - 0x|00| terminates LCS character strings.
 
-Maybe you're not familiar with this vocabulary. Document `EV3
-Firmware Developer Kit
+Maybe you're not familiar with this vocabulary. Document `EV3 Firmware
+Developer Kit
 <https://www.lego.com/cdn/cs/set/assets/blt77bd61c3ac436ea3/LEGO_MINDSTORMS_EV3_Firmware_Developer_Kit.pdf>`_
-is the will help you. Read the details about the leading
-identification byte in section *3.4 Parameter encoding*.
+will help you. Read the details about the leading identification byte
+in section *3.4 Parameter encoding*.
 
 
 Starting programs
@@ -386,7 +1035,7 @@ Playing Sound Files repeatedly
 ..............................
 
 As above, take an USB cable, connect your EV3 brick with your computer
-and replace the MAC-address by the one of your EV3 brick, then start
+and replace MAC-address by the one of your EV3 brick, then start
 this program.
 
 .. code:: python3
@@ -765,7 +1414,7 @@ There is an operation, that asks for the type and mode of a sensor at a specifie
 
 Please connect some sensors to your sensor ports and some motors to
 your motor ports. Then connect your EV3 brick and your computer with
-an USB cable. Replace the MAC-address by the one of your EV3 brick.
+an USB cable. Replace MAC-address by the one of your EV3 brick.
 The following program sends two direct commands, the first asks for
 the sensors, the second for the motors.
 
@@ -902,7 +1551,7 @@ Touch mode of the Touch Sensor
 
 We use operation *opInput_Device* to ask the touch sensor if it currently is touched.
 Connect your touch sensor with port 1, take an USB-cable and connect
-your computer with your EV3 brick, replace the MAC-address with the one
+your computer with your EV3 brick, replace MAC-address with the one
 of your EV3 brick, then run this program:
 
 .. code:: python3
@@ -968,8 +1617,8 @@ The bump mode of the touch sensor counts the number of touches since the
 last reset. The following program resets the counter of the touch sensor, waits
 for five seconds, then asks about the number of touches.
 
-If you own a Wifi dongle and both, you computer and your EV3 brick are
-connected to the Wifi, then you can start the following program after
+If you own a WiFi dongle and both, you computer and your EV3 brick are
+connected to the WiFi, then you can start the following program after
 you replaced the MAC-address. If not, replace the protocol by USB or
 by BLUETOOTH.
 
@@ -1046,7 +1695,7 @@ Measure distances
 
 Use operation *opInput_Device* to read data of the infrared sensor.
 Connect your EV3 infrared sensor with port 3, take an USB-cable and connect
-your computer with your EV3 brick, replace the MAC-address with the one
+your computer with your EV3 brick, replace MAC-address with the one
 of your EV3 brick, then run this program:
 
 .. code:: python3
@@ -1092,7 +1741,7 @@ channels and the infrared sensor measures its own position relative to
 the position the beacon.
 
 Connect your EV3 infrared sensor with port 3, take an USB-cable and
-connect your computer with your EV3 brick, replace the MAC-address with
+connect your computer with your EV3 brick, replace MAC-address with
 the one of your EV3 brick, switch on the beacon, select a channel,
 place it in front of the infrared sensor, then run this program:
 
@@ -1177,7 +1826,7 @@ Reading the color
 
 We use operation *opInput_Device* to read data of the color sensor.
 Connect your color sensor with port 2, take an USB-cable and connect
-your computer with your EV3 brick, replace the MAC-address with the one
+your computer with your EV3 brick, replace MAC-address with the one
 of your EV3 brick, then run this program:
 
 .. code:: python3
@@ -1352,7 +2001,7 @@ with using four operations:
   Stops the current movement of one or multiple motors.
 
 Connect your EV3 medium motor with port B, connect your computer via
-Bluetooth with your EV3 brick, replace the MAC-address with the one of
+Bluetooth with your EV3 brick, replace MAC-address with the one of
 your EV3 brick, then run this program:
 
 .. code:: python3
@@ -1513,7 +2162,7 @@ use these new operations:
   Tests if a motor is currently busy.
 
 Connect your EV3 medium motor with port B, connect your computer via
-Bluetooth with your EV3 brick, replace the MAC-address with the one of
+Bluetooth with your EV3 brick, replace MAC-address with the one of
 your EV3 brick, then run this program:
 
 .. code:: python3
@@ -1603,7 +2252,7 @@ Some remarks:
   - Instead of waiting, this program uses *opOutput_Test* to ask
     frequently, if the movement is still in progress.
   - If still your song is not played correctly, use protocols USB or
-    Wifi instead of Bluetooth, because these are faster and speed
+    WiFi instead of Bluetooth, because these are faster and speed
     helps to prevent conflicts.
 
 The output:
@@ -1751,7 +2400,7 @@ stopped. Encapsulating activities into thread task objects helps to
 code applications of more and more parallel actions.
 
 Connect your EV3 medium motor with port B, connect your computer via
-Bluetooth with your EV3 brick, replace the MAC-address with the one of your
+Bluetooth with your EV3 brick, replace MAC-address with the one of your
 EV3 brick, then run this program:
 
 .. code:: python3
@@ -1966,8 +2615,9 @@ Moving a motor to a Specified Position
 ......................................
 
 Connect your EV3 medium motor with port B, connect your computer and
-your EV3 brick with an USB cable, replace the MAC-address with the one of your
-EV3 brick, then run this program:
+your EV3 brick with an USB cable, replace MAC-address
+``00:16:53:42:2B:99`` with the one of your EV3 brick, then run this
+program:
 
 .. code:: python3
 

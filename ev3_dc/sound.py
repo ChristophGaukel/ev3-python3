@@ -1,14 +1,10 @@
-#!/usr/bin/env python3
 """
 LEGO Mindstorms EV3 direct commands - sound
 """
 
-from datetime import datetime
-from numbers import Number, Integral
-from time import sleep
-from thread_task import Task, Repeated, Periodic, Sleep
+from numbers import Number
+from thread_task import Task, Repeated, Periodic
 from .constants import (
-    BLUETOOTH,
     opUI_Write,
     opSound,
     TONE,
@@ -16,15 +12,18 @@ from .constants import (
     REPEAT,
     BREAK,
     LED,
+    LED_OFF,
     LED_ORANGE,
     LED_RED,
+    LED_GREEN,
+    LED_GREEN_FLASH,
     LED_RED_FLASH,
-    LED_GREEN
+    LED_ORANGE_FLASH,
+    LED_GREEN_PULSE,
+    LED_RED_PULSE,
+    LED_ORANGE_PULSE,
 )
-from .functions import (
-    LCX,
-    LCS
-)
+from .functions import LCX, LCS
 from .ev3 import EV3
 
 TRIAD = {
@@ -243,25 +242,58 @@ class Jukebox(EV3):
     """
     plays songs and uses LEDs
     """
-    def __init__(self, protocol: str = None, host: str = None, ev3_obj=None):
-        super().__init__(protocol=protocol, host=host, ev3_obj=ev3_obj)
-        self._volume = 1
-        self._temperament = 440
-
-    @property
-    def volume(self):
+    def __init__(
+            self,
+            *,
+            protocol: str = None,
+            host: str = None,
+            ev3_obj: EV3 = None,
+            volume: int = None,
+            temperament:int = 440,
+            verbosity: int = 0
+    ):
         """
-        volume of sound [0 - 100] (default: 1)
-        """
-        return self._volume
+        Keyword only arguments (either protocol and host or ev3_obj)
 
-    @volume.setter
-    def volume(self, value: int):
-        assert isinstance(value, Integral), \
-            "volume needs to be an integer"
-        assert value >= 0 and value <= 100, \
-            "volume needs to be in range [0 - 100]"
-        self._volume = value
+          protocol
+            either ev3_dc.BLUETOOTH, ev3_dc.USB or ev3_dc.WIFI
+          host
+            mac-address of the LEGO EV3 (e.g. '00:16:53:42:2B:99')
+          ev3_obj
+            an existing EV3 object 
+            (its already established connection will be used)
+          volume
+            sound volume [%], values from 0 to 100
+          temperament
+            temperament of the tones (delfault: 440 Hz)
+          verbosity
+            level (0, 1, 2) of verbosity (prints on stdout).
+        """
+        assert volume is None or isinstance(volume, int), \
+            'volume needs to be of type int'
+        assert volume is None or 0 <= volume <= 100, \
+            'volume must be between 0 and 100'
+        assert isinstance(temperament, int), \
+            'temperament needs to be an int'
+        assert temperament > 0, \
+            'temperament needs to be positive'
+
+        super().__init__(
+                 protocol=protocol,
+                 host=host,
+                 ev3_obj=ev3_obj,
+                 verbosity=verbosity
+         )
+        
+        self._volume = volume
+        self._temperament = temperament
+
+        if self._physical_ev3._introspection is None:
+            self._physical_ev3.introspection(verbosity)
+        
+    def __str__(self):
+        """description of the object in a str context"""
+        return 'Jukebox as ' + super().__str__()
 
     @property
     def temperament(self):
@@ -271,9 +303,9 @@ class Jukebox(EV3):
         return self._temperament
 
     @temperament.setter
-    def temperament(self, value: Number):
-        assert isinstance(value, Number), \
-            "temperament needs to be a number"
+    def temperament(self, value: int):
+        assert isinstance(value, int), \
+            "temperament needs to be an int"
         assert value > 0, "temperament needs to be positive"
         self._temperament = value
 
@@ -281,10 +313,24 @@ class Jukebox(EV3):
         """
         changes LED color
 
-        Positional Arguments:
+        Positional arguments:
           led_pattern:
             color of LEDs, f.i. ev3.LED_RED
         """
+        assert isinstance(led_pattern, bytes), \
+            'led_pattern must be of type bytes'
+        assert led_pattern in (
+                LED_OFF,
+                LED_GREEN,
+                LED_RED,
+                LED_ORANGE,
+                LED_GREEN_FLASH,
+                LED_RED_FLASH,
+                LED_ORANGE_FLASH,
+                LED_GREEN_PULSE,
+                LED_RED_PULSE,
+                LED_ORANGE_PULSE,
+        ), 'LED pattern ' + led_pattern + ' not provided'
         ops = b''.join((
             opUI_Write,
             LED,
@@ -295,18 +341,19 @@ class Jukebox(EV3):
     def play_tone(
             self,
             tone: str,
+            *,
             duration: Number = None,
-            volume: Number = None
+            volume: int = None
     ) -> None:
         """
         plays a tone
 
-        Positional Arguments
+        Mandatory positional arguments
 
           tone
             name of tone f.i. "c'", "cb''", "c#"
 
-        Keyword Arguments
+        Keyword only arguments
 
           duration
             length (sec.) of the tone (no duration means forever)
@@ -317,8 +364,8 @@ class Jukebox(EV3):
             "duration needs to be a number"
         assert duration is None or duration > 0, \
             "duration needs to be positive"
-        assert volume is None or isinstance(volume, Integral), \
-            "volume needs to be an integer"
+        assert volume is None or isinstance(volume, int), \
+            "volume needs to be an int"
         assert volume is None or volume >= 0 and volume <= 100, \
             "volume needs to be in range [0 - 100]"
 
@@ -371,7 +418,7 @@ class Jukebox(EV3):
             duration = 0
 
         if volume is None:
-            volume = self._volume
+            volume = self._physical_ev3._introspection["volume"]
 
         ops = b''.join((
             opSound,
@@ -385,34 +432,39 @@ class Jukebox(EV3):
     def play_sound(
             self,
             path: str,
-            volume: Number = None,
+            *,
+            volume: int = None,
             repeat: bool = False
     ) -> None:
         """
         plays a sound file
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path
             name of the sound file (without extension ".rsf")
             as absolute path, or relative to /home/root/lms2012/sys/
 
-        Keyword Arguments
+        Keyword only arguments
 
           volume
             volume [0 - 100] of tone (defaults to attribute volume)
           repeat
             flag, if repeatedly playing
         """
-        assert volume is None or isinstance(volume, Integral), \
-            "volume needs to be an integer"
+        assert volume is None or isinstance(volume, int), \
+            "volume needs to be an int"
         assert volume is None or volume >= 0 and volume <= 100, \
             "volume needs to be in range [0 - 100]"
         assert isinstance(repeat, bool), \
             "repeat must be a bool"
 
-        if volume is None:
+        if volume is not None:
+            pass
+        elif self._volume is not None:
             volume = self._volume
+        else:
+            volume = self._physical_ev3._introspection["volume"]
 
         if repeat:
             ops = b''.join((
@@ -434,20 +486,21 @@ class Jukebox(EV3):
     def sound(
             self,
             path: str,
+            *,
             duration: float = None,
-            volume: Number = None,
+            volume: int = None,
             repeat: bool = False
     ) -> Task:
         """
         returns a Task object, that plays a sound file
 
-        Positional Arguments
+        Mandatory positional arguments
 
           path
             name of the sound file (without extension ".rsf")
             as absolute path, or relative to /home/root/lms2012/sys/
 
-        Keyword Arguments
+        Keyword only arguments
 
           duration
             duration of the sound file (in sec.)
@@ -460,12 +513,19 @@ class Jukebox(EV3):
             "duration needs to be a number"
         assert duration is None or duration > 0, \
             "duration needs to be positive"
-        assert volume is None or isinstance(volume, Integral), \
-            "volume needs to be an integer"
+        assert volume is None or isinstance(volume, int), \
+            "volume needs to be an int"
         assert volume is None or volume >= 0 and volume <= 100, \
             "volume needs to be in range [0 - 100]"
         assert isinstance(repeat, bool), \
             "repeat must be a bool"
+
+        if volume is not None:
+            pass
+        elif self._volume is not None:
+            volume = self._volume
+        else:
+            volume = self._physical_ev3._introspection["volume"]
 
         if not repeat and not duration:
             return Task(
@@ -515,9 +575,24 @@ class Jukebox(EV3):
         """
         self.send_direct_cmd(opSound + BREAK)
 
-    def song(self, song: dict) -> Task:
+    def song(
+            self,
+            song: dict,
+            *,
+            volume: int = None
+    ) -> Task:
         """
         returns a Task object, that plays a song
+
+        Mandatory positional arguments
+
+          song
+            dict with song data (e.g. ev3.HAPPY_BIRTHDAY)
+
+        Keyword only arguments
+
+          volume
+            volume [0 - 100] of tone (defaults to attribute volume)
         """
         assert isinstance(song, dict), \
             'song needs to be a dict'
@@ -529,8 +604,19 @@ class Jukebox(EV3):
             "song must have a key 'tones'"
         assert 'led_sequence' in song, \
             "song must have a key 'led_sequence'"
+        assert volume is None or isinstance(volume, int), \
+            "volume needs to be an int"
+        assert volume is None or volume >= 0 and volume <= 100, \
+            "volume needs to be in range [0 - 100]"
 
-        class NextTone(object):
+        if volume is not None:
+            pass
+        elif self._volume is not None:
+            volume = self._volume
+        else:
+            volume = self._physical_ev3._introspection["volume"]
+
+        class Tones(object):
             def __init__(self, song: dict, jukebox: 'Jukebox'):
                 self._tones = song['tones']
                 self._tempo = song['tempo']
@@ -540,15 +626,19 @@ class Jukebox(EV3):
             def reset(self):
                 self._pos = 0
 
-            def next(self):
+            def tone_next(self):
                 if self._pos == len(self._tones):
                     return -1
                 tone, beats = self._tones[self._pos]
-                self._jukebox.play_tone(tone)
+                self._jukebox.play_tone(tone, volume=volume)
                 self._pos += 1
                 return 60 * beats / self._tempo
 
-        class NextColor(object):
+            def tone_again(self):
+                tone, beats = self._tones[self._pos]
+                self._jukebox.play_tone(tone, volume=volume)
+
+        class Colors(object):
             def __init__(self, song: dict, jukebox: 'Jukebox'):
                 self._led_sequence = song['led_sequence']
                 self._jukebox = jukebox
@@ -557,70 +647,43 @@ class Jukebox(EV3):
             def reset(self):
                 self._pos = 0
 
-            def next(self):
+            def color_next(self):
                 self._jukebox.change_color(self._led_sequence[self._pos])
                 self._pos += 1
                 self._pos %= len(self._led_sequence)
 
-        nt = NextTone(song, self)
-        nc = NextColor(song, self)
-        tones = (
-            Task(
-                nt.reset,
-                action_stop=self.stop_sound
-            ) +
-            Repeated(nt.next) +
-            Task(self.stop_sound)
-        )
-        colors = (
-            Task(
-                nc.reset,
-                action_stop=self.change_color,
-                args_stop=(LED_GREEN,)
-            ) +
-            Periodic(
-                60 * song["beats_per_bar"] / song["tempo"],
-                nc.next
-            )
-        )
+            def color_again(self):
+                self._jukebox.change_color(self._led_sequence[self._pos])
 
         if "upbeat" in song:
             upbeat_duration = 60 * song["upbeat"] / song["tempo"]
         else:
             upbeat_duration = 0
 
-        return (
-            Task(
+        t = Tones(song, self)
+        c = Colors(song, self)
+        # colors is endless and must be stopped
+        colors = Periodic(
+                60 * song["beats_per_bar"] / song["tempo"],
+                c.color_next,
+                action_stop=self.change_color,
+                args_stop=(LED_GREEN,),
+                action_cont=c.color_again
+        )
+        # tones knows its end and does the timing
+        return Task(
+                t.reset
+        ) + Task(
+                c.reset
+        ) + Task(
                 colors.start,
                 args=(upbeat_duration,)
-            ) +
-            Task(tones) +  # threadless child
-            Task(colors.stop)
+        ) + Repeated(
+                t.tone_next,
+                action_stop=self.stop_sound,
+                action_cont=t.tone_again
+        ) + Task(
+                self.stop_sound
+        ) + Task(
+                colors.stop
         )
-
-
-if __name__ == "__main__":
-    jukebox = Jukebox(protocol=BLUETOOTH, host='00:16:53:42:2B:99')
-    jukebox.verbosity = 1
-    songs = (
-        jukebox.song(HAPPY_BIRTHDAY) +
-        Sleep(1) +
-        jukebox.song(ALLE_MEINE_ENTCHEN)
-    )
-    songs.start()
-    sleep(5)
-    songs.stop()
-    now = datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** stopped ***")
-    sleep(3)
-    songs.cont()
-    now = datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** continued ***")
-    sleep(14)
-    jukebox.volume = 12
-    now = datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** volume 12 ***")
-    sleep(5)
-    jukebox.volume = 1
-    now = datetime.now().strftime('%H:%M:%S.%f')
-    print(now, "*** volume 1 ***")

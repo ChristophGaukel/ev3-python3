@@ -8,6 +8,8 @@ Examples
    examples_ev3
    examples_touch
    examples_infrared
+   examples_ultrasonic
+   examples_color
    examples_motor
    examples_filesystem
    examples_twowheelvehicle
