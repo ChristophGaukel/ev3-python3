@@ -9,9 +9,9 @@ import socket
 import struct
 from collections import namedtuple
 from time import sleep
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Lock
-from .exceptions import DirCmdError, SysCmdError
+from .exceptions import NoEV3, DirCmdError, SysCmdError
 from .constants import (
     _ID_VENDOR_LEGO,
     _ID_PRODUCT_EV3,
@@ -143,7 +143,6 @@ class _PhysicalEV3:
             isinstance(self._socket, socket.socket)
         ):
             self._socket.close()
-            self._socket = None
 
     def next_msg_cnt(self) -> int:
         '''
@@ -177,7 +176,10 @@ class _PhysicalEV3:
             socket.SOCK_STREAM,
             socket.BTPROTO_RFCOMM
         )
-        self._socket.connect((self._host, 1))
+        try:
+            self._socket.connect((self._host, 1))
+        except OSError:
+            raise NoEV3('EV3 brick not found') from None
 
     def _connect_wifi(self) -> int:
         """
@@ -185,34 +187,41 @@ class _PhysicalEV3:
         """
 
         # listen on port 3015 for a UDP broadcast from the EV3
-        UDPSock = socket.socket(
-            socket.AF_INET,
-            socket.SOCK_DGRAM
-        )
-        UDPSock.bind(('', 3015))
-        data, addr = UDPSock.recvfrom(67)
+        started_at = datetime.now()
+        while True:
+            UDPSock = socket.socket(
+                socket.AF_INET,
+                socket.SOCK_DGRAM
+            )
+            UDPSock.settimeout(10)
+            UDPSock.bind(('', 3015))
+            try:
+                data, addr = UDPSock.recvfrom(67)
+            except socket.timeout:
+                raise NoEV3('no EV3 brick found') from None
 
-        # pick serial number, port, name and protocol
-        # from the broadcast message
-        matcher = re.search(
-            r'^Serial-Number: (\w*)\s\n' +
-            r'Port: (\d{4,4})\s\n' +
-            r'Name: (\w+)\s\n' +
-            r'Protocol: (\w+)',
-            data.decode('utf-8')
-        )
-        serial_number = matcher.group(1)
-        port = matcher.group(2)
-        name = matcher.group(3)
-        protocol = matcher.group(4)
+            # pick serial number, port, name and protocol
+            # from the broadcast message
+            matcher = re.search(
+                r'^Serial-Number: (\w*)\s\n' +
+                r'Port: (\d{4,4})\s\n' +
+                r'Name: (\w+)\s\n' +
+                r'Protocol: (\w+)',
+                data.decode('utf-8')
+            )
+            serial_number = matcher.group(1)
+            port = matcher.group(2)
+            name = matcher.group(3)
+            protocol = matcher.group(4)
 
-        # test if correct mac-addr
-        if (
-                self._host and
-                serial_number.upper() != self._host.replace(':', '').upper()
-        ):
-            self._socket = None
-            raise ValueError('found ev3 but not ' + self._host)
+            # test if correct mac-addr
+            if (
+                    serial_number.upper() == self._host.replace(':', '').upper()
+            ):
+                break
+
+            if datetime.now() - started_at > timedelta(seconds=10):
+                raise NoEV3('EV3 brick found, but not ' + self._host)
 
         # Send an UDP message back to the EV3
         # to make it accept a TCP/IP connection
@@ -262,7 +271,7 @@ class _PhysicalEV3:
             else:
                 self._device = dev
         if not self._device:
-            raise RuntimeError("Lego EV3 not found")
+            raise NoEV3("Lego EV3 not found")
 
         # handle interfaces
         for i in self._device.configurations()[0].interfaces():

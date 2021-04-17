@@ -15,7 +15,7 @@ Asking for the current state
 Attribute :py:attr:`~ev3_dc.Touch.touched` is of type bool and tells,
 if the sensor currently is touched.
 
-Connect your EV3 device with your local network via Wifi.
+Connect your EV3 device with your local network via WiFi.
 Replace the MAC-address by the one of your EV3 brick, connect a touch sensor
 (it may be an EV3-Touch or a NXT-Touch)
 with PORT 1, then start this program.
@@ -104,7 +104,7 @@ mode of the Touch Sensor <bump-mode-dc>`). The touch-mode is, what we
 have seen above: the sensor replies it's current state. The bump-mode
 counts the number of bumps since the last sensor clearing.
 
-Connect your EV3 device with your local network via Wifi.
+Connect your EV3 device with your local network via WiFi.
 Replace the MAC-address by the one of your EV3 brick, connect a touch sensor
 (it may be an EV3-Touch or a NXT-Touch)
 with PORT 1, then start this program.

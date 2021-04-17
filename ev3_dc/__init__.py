@@ -28,7 +28,11 @@ from .sound import (
 from .touch import Touch
 from .infrared import Infrared
 from .ultrasonic import Ultrasonic
-from .vehicle import TwoWheelVehicle
+from .vehicle import (
+        TwoWheelVehicle,
+        VehiclePosition,
+        MotorPositions
+)
 from .color import Color
 
 from .exceptions import DirCmdError, SysCmdError

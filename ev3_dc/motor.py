@@ -79,7 +79,7 @@ class Motor(EV3):
           protocol
             BLUETOOTH == 'Bluetooth'
             USB == 'Usb'
-            WIFI == 'Wifi'
+            WIFI == 'WiFi'
           host
             mac-address of the LEGO EV3 (f.i. '00:16:53:42:2B:99')
           ev3_obj
@@ -451,7 +451,7 @@ class Motor(EV3):
                 ramp_up_time=self._current_movement['ramp_up_time'],
                 ramp_down_time=self._current_movement['ramp_down_time'],
                 brake=self._current_movement['brake'],
-                _controlled=True
+                _control=True
             )
             return
 
@@ -462,7 +462,7 @@ class Motor(EV3):
                 ramp_up=self._current_movement['ramp_up'],
                 ramp_down=self._current_movement['ramp_down'],
                 brake=self._current_movement['brake'],
-                _controlled=True
+                _control=True
             )
             return
 
@@ -588,7 +588,7 @@ class Motor(EV3):
         ramp_up: int = None,
         ramp_down: int = None,
         brake: bool = False,
-        _controlled: bool = False
+        _control: bool = False
     ) -> None:
         '''
         starts moving the motor by a given angle (without time control).
@@ -647,7 +647,7 @@ class Motor(EV3):
                 ramp_up=ramp_up,
                 ramp_down=ramp_down,
                 brake=brake,
-                _controlled=_controlled
+                _control=_control
             )
 
         if speed is None:
@@ -680,6 +680,10 @@ class Motor(EV3):
             LCX(1),  # VALUES
             GVX(0),  # VALUE1 (output)
 
+            opOutput_Reset,
+            LCX(0),  # LAYER
+            LCX(self._port),  # NOS
+
             opOutput_Step_Speed,
             LCX(0),  # LAYER
             LCX(self._port),  # NOS
@@ -696,7 +700,7 @@ class Motor(EV3):
         reply = self.send_direct_cmd(ops, global_mem=4)
         position = round(struct.unpack('<f', reply)[0])
 
-        if _controlled:
+        if _control:
             self._current_movement = {
                 'op': 'Step_Speed',
                 'speed': speed,
@@ -808,7 +812,7 @@ class Motor(EV3):
                     'ramp_up': ramp_up,
                     'ramp_down': ramp_down,
                     'brake': brake,
-                    '_controlled': True
+                    '_control': True
                 },
                 duration=self._delta_time,
                 action_stop=self.stop,
@@ -830,7 +834,7 @@ class Motor(EV3):
         ramp_up: int = None,
         ramp_down: int = None,
         brake: bool = False,
-        _controlled: bool = False
+        _control: bool = False
     ):
         '''
         start moving the motor to a given position (without time control).
@@ -872,8 +876,8 @@ class Motor(EV3):
         assert isinstance(brake, bool), \
             'brake must be a boolean'
 
-        assert isinstance(_controlled, bool), \
-            '_controlled must be a boolean'
+        assert isinstance(_control, bool), \
+            '_control must be a boolean'
 
         assert (
             self._current_movement is None or
@@ -1020,7 +1024,7 @@ class Motor(EV3):
         else:
             self.send_direct_cmd(ops, local_mem=24)
 
-        if _controlled:
+        if _control:
             self._current_movement = {
                 'op': 'Step_Speed',
                 'speed': speed,
@@ -1112,7 +1116,7 @@ class Motor(EV3):
                     'ramp_up': ramp_up,
                     'ramp_down': ramp_down,
                     'brake': brake,
-                    '_controlled': True
+                    '_control': True
                 },
                 duration=self._delta_time,
                 action_stop=self.stop,
@@ -1137,7 +1141,7 @@ class Motor(EV3):
         ramp_up_time: float = None,
         ramp_down_time: float = None,
         brake: bool = False,
-        _controlled: bool = False
+        _control: bool = False
     ) -> None:
         '''
         start moving the motor for a given duration.
@@ -1234,7 +1238,7 @@ class Motor(EV3):
         ))
         self.send_direct_cmd(ops)
 
-        if _controlled:
+        if _control:
             self._current_movement = {
                 'op': 'Time_Speed',
                 'duration': duration,
@@ -1329,7 +1333,7 @@ class Motor(EV3):
                     'ramp_up_time': ramp_up_time,
                     'ramp_down_time': ramp_down_time,
                     'brake': brake,
-                    '_controlled': True
+                    '_control': True
                 },
                 duration=duration,
                 action_stop=self.stop,

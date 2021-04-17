@@ -1,6 +1,6 @@
------------------
++++++++++++++++++
 Two Wheel Vehicle
------------------
++++++++++++++++++
 
 .. role:: python(code)
    :language: python3
@@ -19,34 +19,45 @@ vehicle.
 
 
 Calibration
-~~~~~~~~~~~
+===========
+
+Class *TwoWheelVehicle* does the tracking by frequently reading the
+current motor positions of both wheels and then updating the vehicle's
+position. This works fine if the steps between the recalculations are
+small (small deltas of angle) or if the motor movements inbetween are
+steady. This kind of calculation needs two precise informations:
+
+  - the wheel's radius and
+  - the wheel's tread, which is the track width of the two drived
+    wheels.
+
+Therefore we start with two small programs, which allow to determine
+first the radius, then the tread.
+
+Determine the wheel's radius
+----------------------------
 
 Construct a vehicle with two drived wheels, connect your EV3 brick and
-your computer via Wifi, replace the MAC-address by the one of your EV3
+your computer via WiFi, replace the MAC-address by the one of your EV3
 brick, connect the left wheel motor (medium or large) with PORT A and
-the right wheel motor with PORT D, then start this program.
+the right wheel motor with PORT D. Measure the diameter of the drived
+wheels and take half of the diameter as value of radius_wheel (in
+meter). Then start this program.
 
 .. code:: python3
 
   import ev3_dc as ev3
-  from thread_task import Sleep, Task
   
-  my_vehicle = ev3.TwoWheelVehicle(
-      0.0209,  # radius_wheel
-      0.1175,  # tread
+  with ev3.TwoWheelVehicle(
+      0.0210,  # radius_wheel_measured
+      0.1224,  # tread
       protocol=ev3.WIFI,
       host='00:16:53:42:2B:99',
-  )
-  
-  parcours = (
-      my_vehicle.task_straight(2.) +
-      Sleep(.5) +
-      Task(my_vehicle.stop)
-  )
-  parcours.start(thread=False)
+  ) as my_vehicle:
+      my_vehicle.drive_straight(2.).start(thread=False)
   
 Some remarks:
-  - If you don't own a Wifi dongle, use protocol *BLUETOOTH* instead.
+  - If you don't own a WiFi dongle, use protocol *BLUETOOTH* instead.
   - If your vehicle circles clockwise on place, add
     :python:`my_vehicle.polarity_right = -1` to your code.
   - If your vehicle circles anticlockwise on place, add
@@ -55,39 +66,299 @@ Some remarks:
     and :code:`my_vehicle.polarity_right = -1` to your code.
   - Measure the real distance of your vehicle's movement, then do these steps:
 
-    - Calclulate :math:`radius\_wheel = 0.0209\,m \times \frac{real\_distance}{2\,m}`.
-    - In the program code replace 0.0209 by your :math:`radius\_wheel`.
+    - Calclulate :math:`radius\_wheel_{effective} = radius\_wheel_{measured} \times \frac{real\_distance}{2\,m}`.
+    - In the program code replace :math:`radius\_wheel_{measured}` by :math:`radius\_wheel_{effective}`.
     - Restart the program and again measure the distance of the movement. Now it
       should be close to :math:`2.00\,m`.
-      
 
-  - This parcours is quite simple, but you need to calibrate your vehicle before you
-    can do precise movements.
+  - The last code line looks a bit strange. First we call method
+    :py:meth:`~ev3_dc.TwoWheelVehicle.drive_straight`, which returns an
+    object. Then we call method :py:meth:`~thread_task.Task.start` of
+    this object and set its keyword argument *thread* to value *False*.
 
-Now, when you know the radius of your vehicle's wheels, you need to
-know its tread. Please start the following program and count the circles.
+Determine the wheel's tread
+---------------------------
+
+Now you know the effective radius of your vehicle's wheels but you
+need to know the effective width of the vehicle's tread too. Replace
+*radius_wheel* by your effective value, measure the track width of your
+vehicle and take it as the tread value, then start the
+following program and count the circles.
 
 .. code:: python3
 
   import ev3_dc as ev3
-  from thread_task import Sleep, Task
   
-  my_vehicle = ev3.TwoWheelVehicle(
-      0.0209,  # radius_wheel
-      0.1175,  # tread
+  with ev3.TwoWheelVehicle(
+      0.0210,  # radius_wheel
+      0.1224,  # tread_measured
       protocol=ev3.WIFI,
       host='00:16:53:42:2B:99',
-  )
+  ) as my_vehicle:
+      my_vehicle.drive_turn(3600, 0.0).start(thread=False)
   
-  parcours = (
-      my_vehicle.task_turn(0, 3600) +
-      Sleep(.5) +
-      Task(my_vehicle.stop)
-  )
-  parcours.start(thread=False)
+Some remarks:
+  - The vehicle circles anticlockwise because this is the positive
+    direction of rotation.
+  - 3600 degrees means 10 full circles. You will measure something
+    different. Multiply the number of full circles by 360 degrees and
+    add the fraction of the last circle (in degrees). This is the
+    :math:`real\_angle` of the rotation. Then do:
+
+    - Calclulate :math:`tread_{effective} = tread_{measured} \times
+      \frac{3600 °}{real\_angle}`.
+    - In the program code replace the value :math:`tread_{measured}`
+      by the value :math:`tread_{effective}`.
+    - Restart the program and again measure the total angle of the
+      rotations. Now it should be close to 10 full circles or
+      :math:`3600 °`.
+
+  - The precision depends on the tyres. If you use wheels with wide
+    base tyres, then the calibration is less exact. From situation to
+    situation it will be a different location of the contact face,
+    where the grip occurs, which says: the tread width varies.
 
 
+Precise Driving
+===============
+
+Two methods :py:meth:`~ev3_dc.TwoWheelVehicle.drive_straight` and
+:py:meth:`~ev3_dc.TwoWheelVehicle.drive_turn` allow to specify a
+series of movements, which the vehicle will follow. Maybe you know
+`turtle <https://docs.python.org/3/library/turtle.html#turtle.home>`_
+from the standard python library. Here is a robotic pendant.
+
+Connect your EV3 brick and your computer via WiFi, replace the
+MAC-address by the one of your EV3 brick, connect the left wheel motor
+(medium or large) with PORT A and the right wheel motor with PORT D,
+replace the values of *radius_wheel* and *tread* with the values from
+your calibration, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  with ev3.TwoWheelVehicle(
+      0.01518,  # radius_wheel
+      0.11495,  # tread
+      protocol=ev3.WIFI,
+      host='00:16:53:42:2B:99',
+  ) as my_vehicle:
+      parcours = (
+          my_vehicle.drive_straight(0.5) +
+          my_vehicle.drive_turn(120, 0.0) +
+          my_vehicle.drive_straight(0.5) +
+          my_vehicle.drive_turn(120, 0.0) +
+          my_vehicle.drive_straight(0.5) +
+          my_vehicle.drive_turn(120, 0.0)
+      )
+      parcours.start(thread=False)
+
+Some remarks:
+
+  - The parcours builds an equilateral triangle with a side length of
+    half a meter.
+  - The program does not start six single movements, it instead
+    defines a parcours and then starts the driving by starting the
+    parcours.
+  - Method *drive_turn* is called with two arguments, the first one
+    sets the angle, the second one the radius. Here the radius is
+    zero, therefore the vehicle turns on place. Please replace the
+    radius with a positive value greater than zero and start the
+    program again.
+  - Positive values of *drive_turn*'s angle mean turn to the left,
+    negative values mean turn to the right. Please change the signs of
+    the three angles and start the program again. Then the triangle
+    will be drived clockwise.
+
+Tracking
+========
+
+Class *TwoWheelVehicle* tracks the vehicle's position and orientation.
+Property :py:attr:`~ev3_dc.TwoWheelVehicle.position` tells the current
+values. Alternatively, you can use
+:py:attr:`~ev3_dc.TwoWheelVehicle.tracking_callback` to handle the
+information about the current position and orientation.
+
+Connect your EV3 brick and your computer via WiFi, replace the
+MAC-address by the one of your EV3 brick, connect the left wheel motor
+(medium or large) with PORT A and the right wheel motor with PORT D,
+replace the values of *radius_wheel* and *tread* with the values from
+your calibration, then start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  def print_position(pos: ev3.VehiclePosition) -> None:
+      '''
+      prints current position and orientation of the vehicle
+      '''
+      print(
+          f'\rx: {pos.x:5.2f} m, y: {pos.y:5.2f} m, o: {pos.o:4.0f} °',
+          end=''
+      )
+  
+  with ev3.TwoWheelVehicle(
+      0.01518,  # radius_wheel
+      0.11495,  # tread
+      protocol=ev3.WIFI,
+      host='00:16:53:42:2B:99',
+      speed=20,
+      ramp_up=60,
+      ramp_down=60,
+      tracking_callback=print_position
+  ) as my_vehicle:
+      parcours = my_vehicle.drive_turn(360, 0.2)
+      parcours.start(thread=False)
+      print('\n' + '-' * 14, 'done', '-' * 13)
+      print(my_vehicle.position)
+  
+  
+Some remarks:
+
+  - This parcours drives the vehicle a single cirle in anticlockwise
+    direction.
+  - The vehicle's tracking uses the middle between the two drived
+    wheels as point of reference and measures in meters.
+  - The x-axes points in direction of the vehicle's starting
+    orientation. The y-axes points to the left of its starting
+    orientation. The starting position is, as you may have expected,
+    (0.0, 0.0).
+  - Function *print_position* prints the values of the x- and
+    y-coordinates and the vehicle's orientation whenever it is
+    called. It repeatedly prints the same line. This is done by
+    printing `carriage return
+    <https://en.m.wikipedia.org/wiki/Carriage_return>`_ ("\\r") in
+    front of the printed line and ending the line without a newline
+    ("\\n").
+  - After the parcours has been finished, property *position* is
+    printed, which demonstrates the alternative way to get the
+    vehicle's current position.
+  - This construction of the *TwoWheelVehicle* object uses some more
+    keyword arguments than you have seen before. Beneath
+    :py:attr:`~ev3_dc.TwoWheelVehicle.tracking_callback` there also is
+    set a higher :py:attr:`~ev3_dc.TwoWheelVehicle.speed` and higher
+    values for :py:attr:`~ev3_dc.TwoWheelVehicle.ramp_up` and
+    :py:attr:`~ev3_dc.TwoWheelVehicle.ramp_down`.
+
+Controlled Movements
+====================
+
+A parcours, which the vehicle follows, is one option for driving a
+vehicle. Another option are controlled movements, where sensors or a
+person take over the vehicle's control. In a car the instruments of
+control are the steering wheel, the gas pedal and others. Class
+:py:class:`~ev3_dc.TwoWheelVehicle` provides method
+:py:meth:`~ev3_dc.TwoWheelVehicle.move` for this option and this
+method knows only two arguments, speed and turn. The sign of argument
+*speed* sets the movement's direction (forwards or
+backwards). Argument *turn* is a bit more complicated. It may vary
+between -200 and 200. Here are some special values explained:
+
+  - -200: circle right on place
+  - -100: turn right with unmoved right wheel
+  - 0  : straight
+  - 100: turn left with unmoved left wheel
+  - 200: circle left on place
+
+Now let's demonstrate it with a real thing. Connect your EV3 brick and
+your computer via WiFi, replace the MAC-address by the one of your EV3
+brick, connect the left wheel motor (medium or large) with PORT A and
+the right wheel motor with PORT D, replace the values of
+*radius_wheel* and *tread* with the values from your calibration, then
+start this program in a terminal (not in an interactive python shell):
+
+.. code:: python3
+
+  import curses
+  import ev3_dc as ev3
+      
+  def react(c: int, speed: int, turn: int) -> tuple:
+      '''
+      reacts on keyboard arrow key events by modifying speed and turn
+      '''
+      if c == curses.KEY_LEFT:
+          turn += 5
+          turn = min(turn, 200)
+      elif c == curses.KEY_RIGHT:
+          turn -= 5
+          turn = max(turn, -200)
+      elif c == curses.KEY_UP:
+          speed += 5
+          speed = min(speed, 100)
+      elif c == curses.KEY_DOWN:
+          speed -= 5
+          speed = max(speed, -100)
+      return speed, turn
+  
+  def main(stdscr) -> None:
+      '''
+      controls terminal and keyboard events
+      '''
+      stdscr.clear()
+      stdscr.refresh()
+      stdscr.addstr(0, 0, 'use Arrows to navigate your vehicle')
+      stdscr.addstr(1, 0, 'pause your vehicle with key <p>')
+      stdscr.addstr(2, 0, 'terminate with key <q>')
+  
+      speed = 0
+      turn = 0
+      with ev3.TwoWheelVehicle(
+          0.01518,  # radius_wheel
+          0.11495,  # tread
+          protocol=ev3.WIFI,
+          host='00:16:53:42:2B:99'
+      ) as my_vehicle:
+          while True:
+              c = stdscr.getch()
+              if c in (
+                  curses.KEY_RIGHT,
+                  curses.KEY_LEFT,
+                  curses.KEY_UP,
+                  curses.KEY_DOWN
+              ):
+                  speed, turn = react(c, speed, turn)
+                  my_vehicle.move(speed, turn)
+                  stdscr.addstr(
+                      4,
+                      0,
+                      f'speed: {speed:4d}, turn: {turn:4d}          '
+                  )
+              elif c == ord('p'):
+                  speed = 0
+                  turn = 0
+                  my_vehicle.stop()
+                  pos = my_vehicle.position
+                  stdscr.addstr(
+                      4,
+                      0,
+                      f'x: {pos.x:5.2f} m, y: {pos.y:5.2f} m, o: {pos.o:4.0f} °'
+                  )
+              elif c in (ord('q'), 27):
+                  my_vehicle.stop()
+                  break
+  
+  curses.wrapper(main)
+  
+Some remarks:
+
+  - Python standard module `curses
+    <https://docs.python.org/3/library/curses.html>`_ is kind of
+    old-fashioned because it works with a terminal instead of a
+    graphical interface.
+  - curses takes the control over the terminal and the
+    keyboard. With *stdscr.getch()* it catches the keyboard events
+    and reacts on the arrow keys.
+  - Function *react* does the real stuff. It modifies either
+    *speed* or *turn*.
+  - This program uses two methods of class *TwoWheelVecicle*: *move*
+    and *stop*.
+  - Method *move* is called whenever an array key event occurs. One
+    movement replaces (or interrupts) the last one.
+  - The movement seems to be smooth even when *speed* and *turn*
+    change in steps of 5.
+  - Whenever the movement pauses, the program shows the vehicle's
+    current position, which demonstrates, that the tracking works with
+    controlled movements too.
     
-
-
-

@@ -24,7 +24,7 @@ Class :py:class:`~ev3_dc.Infrared` has an attribute
 tells, if the the sensor currently *sees* some surface in front of the
 sensor and in a distance closer than 1.00 m.
 
-Connect your EV3 device with your local network via Wifi.  Replace the
+Connect your EV3 device with your local network via WiFi.  Replace the
 MAC-address by the one of your EV3 brick, connect an infrared sensor
 with PORT 2, then start this program.
 
@@ -69,7 +69,7 @@ Class :py:class:`~ev3_dc.Infrared` has an attribute
 type *Beacon*. It tells, if the sensor currently *sees* an active
 beacon, which is sending on the requested channel.
 
-Connect your EV3 device with your local network via Wifi. Replace the
+Connect your EV3 device with your local network via WiFi. Replace the
 MAC-address by the one of your EV3 brick. Connect an infrared sensor
 with PORT 2, place a beacon somewhere in front of the sensor, select
 channel 3 and switch on the beacon, then start this program.
@@ -105,7 +105,7 @@ The output of my program was:
 
 .. code:: none
 
-  EV3_IR at PORT_2 of Wifi connected EV3 00:16:53:42:2B:99 (Hugo)
+  EV3_IR at PORT_2 of WiFi connected EV3 00:16:53:42:2B:99 (Hugo)
   beacon on channel 3: Beacon(heading=-6, distance=0.23)
 
 The beacon was positioned left ahead in a distance of 23 cm.
@@ -121,7 +121,7 @@ them. Attribute :py:attr:`~ev3_dc.Infrared.beacons` allows to ask for
 their positions at once.
 
 As before, connect your EV3 device with your local network via
-Wifi. Replace the MAC-address by the one of your EV3 brick. Connect an
+WiFi. Replace the MAC-address by the one of your EV3 brick. Connect an
 infrared sensor with PORT 2, place up to four beacons somewhere in
 front of the sensor, select different channels and switch on the
 beacons, then start this program.
@@ -161,7 +161,7 @@ Class :py:class:`~ev3_dc.Infrared` has an attribute
 type *Remote*. It tells, which of the beacon's buttons currently were
 pushed.
 
-Connect your EV3 device with your local network via Wifi. Replace the
+Connect your EV3 device with your local network via WiFi. Replace the
 MAC-address by the one of your EV3 brick. Connect an infrared sensor
 with PORT 2, place a beacon somewhere in front of the sensor, select
 channel 3 and switch on the beacon, then start this program.
@@ -219,7 +219,7 @@ which returns a tuple of four items, one per channel. As you will
 have expected, each of them may be *None* or of type *Remote*.
 
 As before, connect your EV3 device with your local network via
-Wifi. Replace the MAC-address by the one of your EV3 brick. Connect an
+WiFi. Replace the MAC-address by the one of your EV3 brick. Connect an
 infrared sensor with PORT 2, then start the program. After some time
 push any button of a beacon.
 

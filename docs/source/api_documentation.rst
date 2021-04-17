@@ -116,17 +116,6 @@ NXT-Color. It uses modes *EV3-Color-Reflected*,
 
 .. autoclass:: ev3_dc.Color
    :members:
-      
-
-Motor
-~~~~~
-
-Motor is a subclass of EV3 and provides higher order methods for motor
-movements.
-
-.. autoclass:: ev3_dc.Motor
-   :members:
-
 
 
 Jukebox
@@ -136,6 +125,16 @@ Jukebox is a subclass of EV3 and provides higher order methods for
 sound and LEDs.
 
 .. autoclass:: ev3_dc.Jukebox
+   :members:
+      
+
+Motor
+~~~~~
+
+Motor is a subclass of EV3 and provides higher order methods for motor
+movements.
+
+.. autoclass:: ev3_dc.Motor
    :members:
       
 
