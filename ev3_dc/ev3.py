@@ -10,9 +10,9 @@ import struct
 import hid
 from collections import namedtuple
 from time import sleep
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Lock
-from .exceptions import DirCmdError, SysCmdError
+from .exceptions import NoEV3, DirCmdError, SysCmdError
 from .constants import (
     _ID_VENDOR_LEGO,
     _ID_PRODUCT_EV3,
@@ -146,7 +146,6 @@ class _PhysicalEV3:
             isinstance(self._socket, socket.socket)
         ):
             self._socket.close()
-            self._socket = None
 
     def next_msg_cnt(self) -> int:
         '''
@@ -180,7 +179,10 @@ class _PhysicalEV3:
             socket.SOCK_STREAM,
             socket.BTPROTO_RFCOMM
         )
-        self._socket.connect((self._host, 1))
+        try:
+            self._socket.connect((self._host, 1))
+        except OSError:
+            raise NoEV3('EV3 brick not found') from None
 
     def _connect_wifi(self) -> int:
         """
@@ -188,34 +190,41 @@ class _PhysicalEV3:
         """
 
         # listen on port 3015 for a UDP broadcast from the EV3
-        UDPSock = socket.socket(
-            socket.AF_INET,
-            socket.SOCK_DGRAM
-        )
-        UDPSock.bind(('', 3015))
-        data, addr = UDPSock.recvfrom(67)
+        started_at = datetime.now()
+        while True:
+            UDPSock = socket.socket(
+                socket.AF_INET,
+                socket.SOCK_DGRAM
+            )
+            UDPSock.settimeout(10)
+            UDPSock.bind(('', 3015))
+            try:
+                data, addr = UDPSock.recvfrom(67)
+            except socket.timeout:
+                raise NoEV3('no EV3 brick found') from None
 
-        # pick serial number, port, name and protocol
-        # from the broadcast message
-        matcher = re.search(
-            r'^Serial-Number: (\w*)\s\n' +
-            r'Port: (\d{4,4})\s\n' +
-            r'Name: (\w+)\s\n' +
-            r'Protocol: (\w+)',
-            data.decode('utf-8')
-        )
-        serial_number = matcher.group(1)
-        port = matcher.group(2)
-        name = matcher.group(3)
-        protocol = matcher.group(4)
+            # pick serial number, port, name and protocol
+            # from the broadcast message
+            matcher = re.search(
+                r'^Serial-Number: (\w*)\s\n' +
+                r'Port: (\d{4,4})\s\n' +
+                r'Name: (\w+)\s\n' +
+                r'Protocol: (\w+)',
+                data.decode('utf-8')
+            )
+            serial_number = matcher.group(1)
+            port = matcher.group(2)
+            name = matcher.group(3)
+            protocol = matcher.group(4)
 
-        # test if correct mac-addr
-        if (
-                self._host and
-                serial_number.upper() != self._host.replace(':', '').upper()
-        ):
-            self._socket = None
-            raise ValueError('found ev3 but not ' + self._host)
+            # test if correct mac-addr
+            if (
+                    serial_number.upper() == self._host.replace(':', '').upper()
+            ):
+                break
+
+            if datetime.now() - started_at > timedelta(seconds=10):
+                raise NoEV3('EV3 brick found, but not ' + self._host)
 
         # Send an UDP message back to the EV3
         # to make it accept a TCP/IP connection
@@ -241,21 +250,62 @@ class _PhysicalEV3:
                 ' established'
             )
 
+    import platform
     def _connect_usb(self) -> int:
         """
         Create a device, that holds an USB connection to an EV3
         """
-        global a
-        global h
+        # Mac
+        if platform.system() == "Darwin":
+            global a
+            global h
 
-        if a ==0:
-            h = hid.device()
-            h.open(0x0694, 0x0005)
+            if a ==0:
+                h = hid.device()
+                h.open(0x0694, 0x0005)
+                self._device = h
+                a=1
+
             self._device = h
-            a=1
+            self._device.read(1024, 100)
 
-        self._device = h
-        self._device.read(1024, 100)
+            ev3_devices = usb.core.find(
+                find_all=True,
+                idVendor=_ID_VENDOR_LEGO,
+                idProduct=_ID_PRODUCT_EV3
+            )
+        else:
+        # Windows and Linux
+        # identify EV3 device
+            for dev in ev3_devices:
+                if self._device:
+                    raise ValueError(
+                        'found multiple EV3 but argument host was not set'
+                    )
+                if self._host:
+                    mac_addr = usb.util.get_string(dev, dev.iSerialNumber)
+                    if mac_addr.upper() == self._host.replace(':', '').upper():
+                        self._device = dev
+                        break
+                else:
+                    self._device = dev
+            if not self._device:
+                raise NoEV3("Lego EV3 not found")
+
+            # handle interfaces
+            for i in self._device.configurations()[0].interfaces():
+                try:
+                    #if self._device.is_kernel_driver_active(i.index):
+                    #    self._device.detach_kernel_driver(i.index)
+                    for i in self._device.configurations()[0].interfaces():
+                        if self._device.is_kernel_driver_active(i.index) is True:
+                            self._device.detach_kernel_driver(i.index)
+                except NotImplementedError:
+                    pass
+            self._device.set_configuration()
+
+            # initial read
+            self._device.read(_EP_IN, 1024, 100)
 
     def introspection(self, verbosity: int) -> None:
         """
@@ -440,7 +490,10 @@ class _PhysicalEV3:
         if self._protocol in (BLUETOOTH, WIFI):
             self._socket.send(cmd)
         else:
-            self._device.write(cmd)
+            if platform.system() == "Darwin":
+                self._device.write(cmd)
+            else:
+                self._device.write(_EP_OUT, cmd, 100)
 
         msg_cnt = cmd[2:4]
         if (
@@ -487,7 +540,10 @@ class _PhysicalEV3:
             if self._protocol in (BLUETOOTH, WIFI):
                 reply = self._socket.recv(1024)
             else:
-                reply = bytes(self._device.read(1024, 0))
+                if platform.system() == "Darwin":
+                    reply = bytes(self._device.read(1024))
+                else:
+                    reply = bytes(self._device.read(_EP_IN, 1024, 0))
             len_data = struct.unpack('<H', reply[:2])[0] + 2
             msg_cnt_reply = reply[2:4]
             if verbosity is not None and verbosity > 0:
@@ -1211,3 +1267,4 @@ class EV3:
                 msg_cnt,
                 verbosity=verbosity
         )
+
