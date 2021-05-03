@@ -32,18 +32,16 @@ with PORT 2, then start this program.
 
   import ev3_dc as ev3
   
-  my_infrared = ev3.Infrared(
+  with ev3.Infrared(
           ev3.PORT_2,
           protocol=ev3.WIFI,
           host='00:16:53:42:2B:99'
-  )
-
-  dist = my_infrared.distance
-  if dist:
-      print(f'distance: {my_infrared.distance:3.2f} m')
-  else:
-      print('seen nothing')
-  
+  ) as my_infrared:
+      dist = my_infrared.distance
+      if dist:
+          print(f'distance: {dist:3.2f} m')
+      else:
+          print('seen nothing')
   
 Some remarks:
 
@@ -78,15 +76,14 @@ channel 3 and switch on the beacon, then start this program.
 
   import ev3_dc as ev3
   
-  my_infrared = ev3.Infrared(
+  with ev3.Infrared(
           ev3.PORT_2,
           channel=3,
           protocol=ev3.WIFI,
           host='00:16:53:42:2B:99'
-  )
-  
-  print(my_infrared)
-  print(f'beacon on channel {my_infrared.channel}: {my_infrared.beacon}')
+  ) as my_infrared:
+      print(my_infrared)
+      print(f'beacon on channel {my_infrared.channel}: {my_infrared.beacon}')
   
 Some remarks:
 
@@ -130,17 +127,16 @@ beacons, then start this program.
 
   import ev3_dc as ev3
   
-  my_infrared = ev3.Infrared(
+  with ev3.Infrared(
           ev3.PORT_2,
           protocol=ev3.WIFI,
           host='00:16:53:42:2B:99'
-  )
-  
-  print(f'beacons: {my_infrared.beacons}')
+  ) as my_infrared:
+      print(f'beacons: {my_infrared.beacons}')
 
 The output of my program run:
 
-.. code:: none
+.. code-block:: none
 
   beacons: (None, Beacon(heading=5, distance=0.32), None, None)
 
@@ -171,20 +167,19 @@ channel 3 and switch on the beacon, then start this program.
   import ev3_dc as ev3
   from time import sleep
   
-  my_infrared = ev3.Infrared(
+  with ev3.Infrared(
           ev3.PORT_2,
           channel=3,
           protocol=ev3.WIFI,
           host='00:16:53:42:2B:99'
-  )
-  
-  while True:
-      remote_state = my_infrared.remote
-      if remote_state is not None:
-          break
-      sleep(0.1)
+  ) as my_infrared:
+      while True:
+          remote_state = my_infrared.remote
+          if remote_state is not None:
+              break
+          sleep(0.1)
       
-  print(f'state of the remote on channel {my_infrared.channel}: {remote_state}')
+      print(f'state of the remote on channel {my_infrared.channel}: {remote_state}')
 
 Some remarks:
 
@@ -199,7 +194,7 @@ Some remarks:
 
 The output of my program's execution:
 
-.. code:: none
+.. code-block:: none
 
   state of the remote on channel 3: Remote(permanent=False, red_up=False, red_down=True, blue_up=True, blue_down=False)
 
@@ -228,31 +223,30 @@ push any button of a beacon.
   import ev3_dc as ev3
   import time
   
-  my_infrared = ev3.Infrared(
+  with ev3.Infrared(
           ev3.PORT_2,
           protocol=ev3.WIFI,
           host='00:16:53:42:2B:99'
-  )
+  ) as my_infrared:
+      print(f'started at {time.strftime("%H:%M:%S", time.localtime())}')
   
-  print(f'started at {time.strftime("%H:%M:%S", time.localtime())}')
+      def any_remote():
+          for remote in my_infrared.remotes:
+              if remote:
+                  return remote
   
-  def any_remote():
-      for remote in my_infrared.remotes:
-          if remote:
-              return remote
+      while True:
+          the_active_one = any_remote()
+          if the_active_one:
+              break
+          time.sleep(0.1)
   
-  while True:
-      the_active_one = any_remote()
-      if the_active_one:
-          break
-      time.sleep(0.1)
-  
-  print(the_active_one)
-  print(f'stopped at {time.strftime("%H:%M:%S", time.localtime())}')
+      print(the_active_one)
+      print(f'stopped at {time.strftime("%H:%M:%S", time.localtime())}')
   
 The output of my program's execution:
 
-.. code:: none
+.. code-block:: none
 
   started at 18:32:01
   Remote(permanent=False, red_up=False, red_down=True, blue_up=True, blue_down=False)

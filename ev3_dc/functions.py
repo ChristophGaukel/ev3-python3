@@ -4,6 +4,10 @@ LEGO EV3 direct commands - functions
 '''
 
 import struct
+from time import time
+from typing import Callable
+from numbers import Number
+
 from .constants import PORT_A, PORT_B, PORT_C, PORT_D
 
 
@@ -105,3 +109,106 @@ def port_motor_input(port_output: int) -> bytes:
     if port_output == PORT_C:
         return LCX(18)
     return LCX(19)
+
+
+def pid(
+        setpoint: float,
+        gain: float,
+        *,
+        time_int: float = None,
+        time_der: float = 0
+) -> Callable:
+    """
+    Parametrize a new PID controller (standard form)
+    
+    A PID controller derives a control signal from a measurement value
+
+    Mandatory positional arguments
+
+      setpoint
+        target value of the measurement
+      gain
+        proportional gain,
+        high values result in fast adaption,
+        but too high values produce oscillations or instabilities
+
+    Optional keyword only arguments
+
+      time_int
+        time of the integrative term [s] (approx. the time for elimination),
+        compensates errors from the past (e.g. steady-state error)
+        small values produce oscillations or instabilities
+        and increase settling time
+      time_der
+        time of the derivative term [s] (approx. the forecast time),
+        damps oszillations, decreases overshooting and reduces settling time
+        but reacts sensitive on noise
+
+    Returns
+      function signal(value: float) -> float
+    """
+    assert isinstance(setpoint, Number), \
+        'setpoint must be a number'
+    assert isinstance(gain, Number) and gain > 0, \
+        'gain must be a positive number'
+    assert (
+        time_int is None or
+        isinstance(time_int, Number) and time_int >= 0
+    ), 'time_int must be a positive number'
+    assert isinstance(time_der, Number) and time_der >= 0, \
+        'time_der must be a positive number'
+    error_pre = None
+    value_pre = None
+    time_pre = None
+    integral = None
+
+    def signal(value: float) -> float:
+        """
+        calculates the control signal from the actually measured value
+
+        Mandatory positional arguments
+          value
+            actually measured value (will be compared to setpoint)
+
+        Returns
+          control signal, which regulates the process
+        """
+        assert isinstance(value, Number), 'value must be a number'
+
+        nonlocal setpoint, gain, time_int, time_der, \
+            error_pre, value_pre, time_pre, integral
+
+        if time_int is None and time_der == 0:
+            # P-controller (proportional term only)
+            return gain * (setpoint - value)
+
+        if time_pre is None:
+            # first call
+            time_pre = time()
+            integral = 0
+            error_pre = (setpoint - value)
+            return gain * (setpoint - value)
+
+        now = time()
+        delta_time = now - time_pre
+        time_pre = now
+        error = (setpoint - value)
+
+        if time_der == 0:
+            # PI-controller (no derivative term)
+            integral += delta_time * error
+            return gain * (error + integral / time_int)
+
+        if time_int is None:
+            # PD-controller (no integrative term)
+            der = (error - error_pre) / delta_time
+            error_pre = error
+            return gain * (error + der * time_der)
+
+        # PID-controller (proportional, integrative and derivative term)
+        der = (error - error_pre) / delta_time
+        error_pre = error
+        integral += delta_time * error
+        return gain * (error + integral / time_int + der * time_der)
+
+    return signal

@@ -13,6 +13,7 @@ from .constants import (
     PORT_4,
     opInput_Device,
     READY_RAW,
+    READY_SI,
     EV3_IR
 )
 from .functions import LCX, GVX

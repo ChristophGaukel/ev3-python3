@@ -714,6 +714,7 @@ class TwoWheelVehicle(EV3):
 
           turn
             type of turn [-200 - 200]
+
               -200: circle right on place
 
               -100: turn right with unmoved right wheel
@@ -1552,7 +1553,7 @@ class TwoWheelVehicle(EV3):
           ramp_down
             degrees for ramp-down
           brake
-            Flag if ending with floating motors (False) or active brake (True).
+            flag if ending with floating motors (False) or active brake (True).
         '''
         assert isinstance(distance, Number), \
             'distance needs to be a number'
@@ -1641,7 +1642,7 @@ class TwoWheelVehicle(EV3):
           ramp_down
             degrees for ramp-down
           brake
-            Flag if ending with floating motors (False) or active brake (True).
+            flag if ending with floating motors (False) or active brake (True).
 
         Returns
 

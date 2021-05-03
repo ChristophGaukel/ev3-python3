@@ -58,7 +58,7 @@ Some remarks:
 
 My program's output was:
 
-.. code:: none
+.. code-block:: none
 
   reflected intensity is 17 %
 
@@ -121,7 +121,7 @@ Some remarks:
 
 My program's output was:
 
-.. code:: none
+.. code-block:: none
 
   the color is green
 
@@ -173,6 +173,6 @@ Some remarks:
 
 My program's output was:
 
-.. code:: none
+.. code-block:: none
 
   ambient intensity is 9 %

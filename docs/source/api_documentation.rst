@@ -13,7 +13,7 @@ LCX
 
 Translates an integer into a direct command compatible number with
 identification byte. It is used for input arguments of operations,
-which are not red from global or local memory. Dependent from the
+which are not read from global or local memory. Dependent from the
 value an LCX will be a byte string of one, two, three or 5 bytes
 length.
 
@@ -51,6 +51,19 @@ port_motor_input
 Allows to use well known motor ports of output commands for input commands too.
 
 .. autofunction:: ev3_dc.port_motor_input
+      
+
+pid
+~~~
+
+pid is a `PID controller
+<https://en.wikipedia.org/wiki/PID_controller>`_. It continuously
+adjusts a system by periodically calculating a signal value from a
+measured variable. Function ``pid()`` does the setup and returns the
+controller, which is a function (with this signature: ``signal(value:
+float) -> float``).
+
+.. autofunction:: ev3_dc.pid
 
 
 Classes
@@ -157,16 +170,4 @@ the filesystem of an EV3 device. It allows to read and write EV3's
 files or directories.
 
 .. autoclass:: ev3_dc.FileSystem
-   :members:
-      
-
-PID
-~~~
-
-PID is a `PID controller
-<https://en.wikipedia.org/wiki/PID_controller>`_. It continuously
-adjusts a system by calculating an error value as the difference
-between a desired setpoint and a measured variable.
-
-.. autoclass:: ev3_dc.PID
    :members:

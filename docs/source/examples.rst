@@ -14,5 +14,6 @@ Examples
    examples_motor
    examples_twowheelvehicle
    examples_filesystem
+   examples_pid
   
 

@@ -4,15 +4,20 @@ LEGO EV3 direct commands - ev3
 '''
 
 import re
-import usb.util
 import socket
 import struct
-import hid
 from collections import namedtuple
 from time import sleep
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Lock
-from .exceptions import DirCmdError, SysCmdError
+
+import platform
+if platform.system() == 'Darwin':
+    import hid
+else:
+    import usb.util
+
+from .exceptions import NoEV3, DirCmdError, SysCmdError
 from .constants import (
     _ID_VENDOR_LEGO,
     _ID_PRODUCT_EV3,
@@ -30,7 +35,7 @@ from .constants import (
     STD,
     ASYNC,
     SYNC,
-    
+
     # introspection
     opInfo,
     opInput_Device,
@@ -101,29 +106,36 @@ System = namedtuple('System', [
         'hw_version'
 ])
 
-a=0
-
 class _PhysicalEV3:
     '''
     holds data and methods, which are singletons per physical EV3 device
     '''
+    devices = set()  # all connected devices
+
     def __init__(
-        self,
-        protocol: str,
-        host: str,
+            self,
+            protocol: str,
+            host: str = None,
     ):
         assert isinstance(protocol, str), \
             'protocol needs to be of type str'
         assert protocol in (BLUETOOTH, WIFI, USB), \
             'Protocol ' + protocol + 'is not valid'
-        assert isinstance(host, str), \
+        assert host is None or isinstance(host, str), \
             "host needs to be of type str"
+        assert host is not None or protocol != BLUETOOTH, \
+            "in case of protocol BLUETOOTH, host needs to be set"
+        assert host is None or host.upper() not in type(self).devices, \
+            f"host {host} already connected, call with argument ev3_obj"
 
         self._msg_cnt = 41
         self._lock = Lock()
         self._reply_buffer = {}
         self._protocol = protocol
-        self._host = host
+        if host is not None:
+            self._host = host.upper()
+        else:
+            self._host = host
         self._device = None
         self._socket = None
         self._name = None
@@ -131,22 +143,34 @@ class _PhysicalEV3:
         self._introspection = None
 
         if protocol == BLUETOOTH:
-            self._connect_bluetooth()
+            self.connect_bluetooth()
         elif protocol == WIFI:
-            self._connect_wifi()
+            self.connect_wifi()
         else:
-            self._connect_usb()
+            self.connect_usb()
+            
+        type(self).devices.add(self._host)
+        
+    @classmethod
+    def get_devices(cls):
+        '''
+        all connected devices in a dict,
+        key is the mac_address of the device
+        value is the number of classes, which share the connection       
+        '''
+        return cls.devices
 
     def __del__(self):
         """
         closes the connection to the LEGO EV3
         """
         if (
-            self._socket is not None and
-            isinstance(self._socket, socket.socket)
+                self._socket is not None and
+                isinstance(self._socket, socket.socket) and
+                self._host in type(self).devices
         ):
             self._socket.close()
-            self._socket = None
+            type(self).devices.remove(self._host)
 
     def next_msg_cnt(self) -> int:
         '''
@@ -168,10 +192,10 @@ class _PhysicalEV3:
                 ':'.join('{:02X}'.format(byte) for byte in msg_cnt) +
                 ' already exists'
             )
-        else:
-            self._reply_buffer[msg_cnt] = reply
+        self._reply_buffer[msg_cnt] = reply
 
-    def _connect_bluetooth(self) -> int:
+
+    def connect_bluetooth(self) -> int:
         """
         Create a socket, that holds a bluetooth-connection to an EV3
         """
@@ -180,42 +204,63 @@ class _PhysicalEV3:
             socket.SOCK_STREAM,
             socket.BTPROTO_RFCOMM
         )
-        self._socket.connect((self._host, 1))
+        try:
+            self._socket.connect((self._host, 1))
+        except OSError:
+            raise NoEV3('No EV3 device found') from None
 
-    def _connect_wifi(self) -> int:
+
+    def connect_wifi(self) -> int:
         """
         Create a socket, that holds a WiFi-connection to an EV3
         """
 
         # listen on port 3015 for a UDP broadcast from the EV3
-        UDPSock = socket.socket(
-            socket.AF_INET,
-            socket.SOCK_DGRAM
-        )
-        UDPSock.bind(('', 3015))
-        data, addr = UDPSock.recvfrom(67)
+        started_at = datetime.now()
+        while True:
+            UDPSock = socket.socket(
+                socket.AF_INET,
+                socket.SOCK_DGRAM
+            )
+            UDPSock.settimeout(10)
+            UDPSock.bind(('', 3015))
+            try:
+                data, addr = UDPSock.recvfrom(67)
+            except socket.timeout:
+                raise NoEV3('No EV3 device found') from None
 
-        # pick serial number, port, name and protocol
-        # from the broadcast message
-        matcher = re.search(
-            r'^Serial-Number: (\w*)\s\n' +
-            r'Port: (\d{4,4})\s\n' +
-            r'Name: (\w+)\s\n' +
-            r'Protocol: (\w+)',
-            data.decode('utf-8')
-        )
-        serial_number = matcher.group(1)
-        port = matcher.group(2)
-        name = matcher.group(3)
-        protocol = matcher.group(4)
+            # pick serial number, port, name and protocol
+            # from the broadcast message
+            matcher = re.search(
+                r'^Serial-Number: (\w*)\s\n' +
+                r'Port: (\d{4,4})\s\n' +
+                r'Name: (\w+)\s\n' +
+                r'Protocol: (\w+)',
+                data.decode('utf-8')
+            )
+            tmp = matcher.group(1).upper()
+            serial_number = ':'.join(
+                (tmp[i:i + 2] for i in range(0, len(tmp), 2))
+            )
+            port = matcher.group(2)
+            name = matcher.group(3)
+            protocol = matcher.group(4)
 
-        # test if correct mac-addr
-        if (
-                self._host and
-                serial_number.upper() != self._host.replace(':', '').upper()
-        ):
-            self._socket = None
-            raise ValueError('found ev3 but not ' + self._host)
+            # test if correct mac-addr
+            if self._host is not None:
+                if serial_number == self._host.upper():
+                    break
+            else:
+                self._host = serial_number
+                break
+
+            if datetime.now() - started_at > timedelta(seconds=10):
+                raise NoEV3(
+                    f'found EV3 device {serial_number}, but not {self._host}'
+                )
+
+        assert self._host not in type(self).devices, \
+            f"host {self._host} already connected, call with argument ev3_obj"
 
         # Send an UDP message back to the EV3
         # to make it accept a TCP/IP connection
@@ -241,35 +286,99 @@ class _PhysicalEV3:
                 ' established'
             )
 
-    def _connect_usb(self) -> int:
+
+    def connect_usb(self) -> int:
         """
         Create a device, that holds an USB connection to an EV3
         """
-        global a
-        global h
+        if platform.system() == 'Darwin':
+            # hidapi
+            devices = hid.enumerate(_ID_VENDOR_LEGO, _ID_PRODUCT_EV3)
+            if len(devices) == 0:
+                raise NoEV3('No EV3 device found')
+            if self._host is None and len(devices) > 1:
+                raise NoEV3('multiple EV3 found, you need to set argument host')
+            if self._host is None and len(devices) == 1:
+                self._device = hid.device()
+                self._device.open_path(devices[0]['path'])
+            else:
+                # multiple devices found, match with host
+                hosts = []
+                for dev in devices:
+                    tmp = dev['serial_number'].upper()
+                    mac_addr = ':'.join((tmp[i:i + 2] for i in range(0, len(tmp), 2)))
+                    if mac_addr == self._host:
+                        self._device = hid.device()
+                        self._device.open_path(dev['path'])
+                        break
+                    hosts.append(mac_addr)
+                if self._device is None:
+                    raise NoEV3(
+                        f'found EV3 devices: {hosts} but not {self._host}'
+                    )
+        else:
+            # pyusb
+            mac_addr = None
+            hosts = []
+            for dev in usb.core.find(
+                    find_all=True,
+                    idVendor=_ID_VENDOR_LEGO,
+                    idProduct=_ID_PRODUCT_EV3
+            ):
+                tmp = usb.util.get_string(dev, dev.iSerialNumber).upper()
+                mac_addr = ':'.join((tmp[i:i + 2] for i in range(0, len(tmp), 2)))
+                hosts.append(mac_addr)
+                if self._device is not None:
+                    raise NoEV3(
+                        'multiple EV3 found, you need to set argument host'
+                    )
+                if self._host is not None:
+                    if mac_addr == self._host.upper():
+                        self._device = dev
+                        break
+                else:
+                    self._device = dev
+                    self._host = mac_addr
+    
+            if self._device is None:
+                if mac_addr is None:
+                    raise NoEV3('No EV3 device found')
+                raise NoEV3(
+                    f'found EV3 devices: {hosts} but not {self._host}'
+                )
+    
+            assert self._host not in type(self).devices, \
+                f"host {self._host} already connected, call with argument ev3_obj"
+    
+            # handle interfaces
+            for i in self._device.configurations()[0].interfaces():
+                try:
+                    if self._device.is_kernel_driver_active(i.index):
+                        self._device.detach_kernel_driver(i.index)
+                except NotImplementedError:
+                    pass
+            self._device.set_configuration()
+    
+            # initial read
+            try:
+                self._device.read(_EP_IN, 1024, 100)
+            except:
+                pass
 
-        if a ==0:
-            h = hid.device()
-            h.open(0x0694, 0x0005)
-            self._device = h
-            a=1
-
-        self._device = h
-        self._device.read(1024, 100)
 
     def introspection(self, verbosity: int) -> None:
         """
         reads informations about itself
         """
         ports = (
-                PORT_1,
-                PORT_2,
-                PORT_3,
-                PORT_4,
-                PORT_A_SENSOR,
-                PORT_B_SENSOR,
-                PORT_C_SENSOR,
-                PORT_D_SENSOR
+            PORT_1,
+            PORT_2,
+            PORT_3,
+            PORT_4,
+            PORT_A_SENSOR,
+            PORT_B_SENSOR,
+            PORT_C_SENSOR,
+            PORT_D_SENSOR
         )
         ops = b''
         for i in range(8):
@@ -282,45 +391,45 @@ class _PhysicalEV3:
                 GVX(2*i + 1)  # MODE (output)
             ))
         ops += b''.join((
-                opMemory_Usage,    
-                GVX(16),  # TOTAL (out)
-                GVX(20),  # FREE (out)
-                opInfo,
-                GET_VOLUME ,  # CMD
-                GVX(24) , # VALUE
-                opInfo,
-                GET_MINUTES ,  # CMD
-                GVX(25) , # VALUE
-                opCom_Get,
-                GET_BRICKNAME,  # CMD
-                LCX(32),  # LENGTH
-                GVX(26),  # NAME (out)
-                opUI_Read,
-                GET_OS_VERS,  # CMD
-                LCX(16),  # LENGTH
-                GVX(58),  # NAME (out)
-                opUI_Read,
-                GET_HW_VERS,  # CMD
-                LCX(8),  # LENGTH
-                GVX(74),  # NAME (out)
-                opUI_Read,
-                GET_FW_VERS,  # CMD
-                LCX(8),  # LENGTH
-                GVX(82),  # NAME (out)
-                opUI_Read,
-                GET_OS_BUILD,  # CMD
-                LCX(12),  # LENGTH
-                GVX(90),  # NAME (out)
-                opUI_Read,
-                GET_FW_BUILD,  # CMD
-                LCX(12),  # LENGTH
-                GVX(102)  # NAME (out)
+            opMemory_Usage,
+            GVX(16),  # TOTAL (out)
+            GVX(20),  # FREE (out)
+            opInfo,
+            GET_VOLUME,  # CMD
+            GVX(24), # VALUE
+            opInfo,
+            GET_MINUTES,  # CMD
+            GVX(25), # VALUE
+            opCom_Get,
+            GET_BRICKNAME,  # CMD
+            LCX(32),  # LENGTH
+            GVX(26),  # NAME (out)
+            opUI_Read,
+            GET_OS_VERS,  # CMD
+            LCX(16),  # LENGTH
+            GVX(58),  # NAME (out)
+            opUI_Read,
+            GET_HW_VERS,  # CMD
+            LCX(8),  # LENGTH
+            GVX(74),  # NAME (out)
+            opUI_Read,
+            GET_FW_VERS,  # CMD
+            LCX(8),  # LENGTH
+            GVX(82),  # NAME (out)
+            opUI_Read,
+            GET_OS_BUILD,  # CMD
+            LCX(12),  # LENGTH
+            GVX(90),  # NAME (out)
+            opUI_Read,
+            GET_FW_BUILD,  # CMD
+            LCX(12),  # LENGTH
+            GVX(102)  # NAME (out)
         ))
         reply = self.send_direct_cmd(
-                ops,
-                global_mem=114,
-                verbosity=verbosity,
-                sync_mode=SYNC
+            ops,
+            global_mem=114,
+            verbosity=verbosity,
+            sync_mode=SYNC
         )
 
         self._introspection = {}
@@ -335,19 +444,19 @@ class _PhysicalEV3:
             else:
                 self._introspection["sensors"][ports[i]] = sensor_type
         (
-                self._introspection["mem_total"],
-                self._introspection["mem_free"],
-                self._introspection["volume"],
-                self._introspection["sleep"],
-                name,
-                os_vers,
-                hw_vers,
-                fw_vers,
-                os_build,
-                fw_build
+            self._introspection["mem_total"],
+            self._introspection["mem_free"],
+            self._introspection["volume"],
+            self._introspection["sleep"],
+            name,
+            os_vers,
+            hw_vers,
+            fw_vers,
+            os_build,
+            fw_build
         ) = struct.unpack(
-                '<2i2B32s16s8s8s12s12s',
-                reply[16:]
+            '<2i2B32s16s8s8s12s12s',
+            reply[16:]
         )
 
         self._introspection["name"] = name.split(b'\x00')[0].decode("utf8")
@@ -356,7 +465,7 @@ class _PhysicalEV3:
         self._introspection["fw_vers"] = fw_vers.split(b'\x00')[0].decode("utf8")
         self._introspection["fw_build"] = fw_build.split(b'\x00')[0].decode("utf8")
         self._introspection["hw_vers"] = hw_vers.split(b'\x00')[0].decode("utf8")
-        
+
         if self._protocol == WIFI:
             ops = b''.join((
                 opCom_Get,
@@ -368,40 +477,40 @@ class _PhysicalEV3:
                 GVX(84)  # IP
             ))
             (
-                    self._introspection["network_name"],
-                    self._introspection["network_mac_adr"],
-                    self._introspection["network_ip_adr"]
+                self._introspection["network_name"],
+                self._introspection["network_mac_adr"],
+                self._introspection["network_ip_adr"]
             ) = [
-                    value.split(b'\x00')[0].decode("utf8")
-                    for value in struct.unpack(
-                            '42s42s42s',
-                            self.send_direct_cmd(
-                                    ops,
-                                    global_mem=126,
-                                    verbosity=verbosity,
-                                    sync_mode=SYNC
-                            )
+                value.split(b'\x00')[0].decode("utf8")
+                for value in struct.unpack(
+                    '42s42s42s',
+                    self.send_direct_cmd(
+                        ops,
+                        global_mem=126,
+                        verbosity=verbosity,
+                        sync_mode=SYNC
                     )
+                )
             ]
             self._introspection["network_mac_adr"] = ':'.join(
-                    self._introspection["network_mac_adr"][i:i+2]
-                    for i in range(6)
+                self._introspection["network_mac_adr"][i:i+2]
+                for i in range(6)
             )
 
     def send_direct_cmd(
-        self,
-        ops: bytes,
-        *,
-        verbosity: int,
-        local_mem: int = 0,
-        global_mem: int = 0,
-        sync_mode: str = None
+            self,
+            ops: bytes,
+            *,
+            verbosity: int,
+            local_mem: int = 0,
+            global_mem: int = 0,
+            sync_mode: str = None
     ) -> bytes:
         """
         Send a direct command to the LEGO EV3
         """
-        
-        if sync_mode == None:
+
+        if sync_mode is None:
             if self._protocol == USB:
                 sync_mode = SYNC
             else:
@@ -440,7 +549,10 @@ class _PhysicalEV3:
         if self._protocol in (BLUETOOTH, WIFI):
             self._socket.send(cmd)
         else:
-            self._device.write(cmd)
+            if platform.system() == 'Darwin':
+                self._device.write(cmd)
+            else:
+                self._device.write(_EP_OUT, cmd, 100)
 
         msg_cnt = cmd[2:4]
         if (
@@ -449,18 +561,17 @@ class _PhysicalEV3:
         ):
             self._lock.release()
             return msg_cnt
-        else:
-            return self.wait_for_reply(
-                msg_cnt,
-                verbosity=verbosity,
-                _locked=True
-            )
+        return self.wait_for_reply(
+            msg_cnt,
+            verbosity=verbosity,
+            _locked=True
+        )
 
     def wait_for_reply(
-        self,
-        msg_cnt: bytes,
-        verbosity: int = None,
-        _locked: bool = False
+            self,
+            msg_cnt: bytes,
+            verbosity: int = None,
+            _locked: bool = False
     ) -> bytes:
         """
         Ask the LEGO EV3 for a reply and wait until it is received
@@ -487,7 +598,10 @@ class _PhysicalEV3:
             if self._protocol in (BLUETOOTH, WIFI):
                 reply = self._socket.recv(1024)
             else:
-                reply = bytes(self._device.read(1024, 0))
+                if platform.system() == 'Darwin':
+                    reply = bytes(self._device.read(1024, 0))
+                else:
+                    reply = bytes(self._device.read(_EP_IN, 1024, 0))
             len_data = struct.unpack('<H', reply[:2])[0] + 2
             msg_cnt_reply = reply[2:4]
             if verbosity is not None and verbosity > 0:
@@ -527,11 +641,11 @@ class _PhysicalEV3:
                 )
 
     def send_system_cmd(
-        self,
-        cmd: bytes,
-        *,
-        verbosity: int,
-        reply: bool = True
+            self,
+            cmd: bytes,
+            *,
+            verbosity: int,
+            reply: bool = True
     ) -> bytes:
         """
         Send a system command to the LEGO EV3
@@ -561,18 +675,20 @@ class _PhysicalEV3:
         if self._protocol in (BLUETOOTH, WIFI):
             self._socket.send(cmd)
         else:
-            self._device.write(_EP_OUT, cmd, 100)
+            if platform.system() == 'Darwin':
+                self._device.write(cmd)
+            else:
+                self._device.write(_EP_OUT, cmd, 100)
 
         msg_cnt = cmd[2:4]
         if not reply:
             self._lock.release()
             return msg_cnt
-        else:
-            return self._wait_for_system_reply(
-                msg_cnt,
-                verbosity=verbosity,
-                _locked=True
-            )
+        return self._wait_for_system_reply(
+            msg_cnt,
+            verbosity=verbosity,
+            _locked=True
+        )
 
     def _wait_for_system_reply(
             self,
@@ -608,14 +724,14 @@ class _PhysicalEV3:
             if self._protocol in (BLUETOOTH, WIFI):
                 reply = self._socket.recv(1024)
             else:
-                reply = bytes(self._device.read(_EP_IN, 1024, 0))
+                if platform.system() == 'Darwin':
+                    reply = bytes(self._device.read(1024, 0))
+                else:
+                    reply = bytes(self._device.read(_EP_IN, 1024, 0))
             len_data = struct.unpack('<H', reply[:2])[0] + 2
             reply_msg_cnt = reply[2:4]
 
-            if (
-                    verbosity is not None and verbosity > 0 or
-                    verbosity is None and self._verbosity > 0
-            ):
+            if verbosity > 0:
                 print(
                     datetime.now().strftime('%H:%M:%S.%f') +
                     ' Recv 0x|' +
@@ -698,13 +814,19 @@ class EV3:
         if ev3_obj:
             assert isinstance(ev3_obj, EV3), \
                 'ev3_obj needs to be instance of EV3'
+            self._conn_owner = False
             self._physical_ev3 = ev3_obj._physical_ev3
         else:
-            self._physical_ev3 = _PhysicalEV3(protocol, host)
+            self._conn_owner = True
+            try:
+                self._physical_ev3 = _PhysicalEV3(protocol, host)
+            except:
+                self._physical_ev3 = None
+                raise
 
         assert isinstance(verbosity, int), \
             "verbosity needs to be of type int"
-        assert verbosity >= 0 and verbosity <= 2, \
+        assert 0 <= verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
         self._verbosity = int(verbosity)
 
@@ -717,25 +839,33 @@ class EV3:
             self._sync_mode = SYNC
         else:
             self._sync_mode = STD
-            
+
     def __enter__(self):
         """
         allows to code 'with EV3 as my_ev3:'
         """
         return self
-    
+
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """
         allows a clean exit from with block
         """
-        self._physical_ev3.__del__()
-        
+        if self._conn_owner:
+            self._physical_ev3.__del__()
+            
+    def __del__(self):
+        """
+        handles deletions
+        """
+        if self._conn_owner and self._physical_ev3 is not None:
+            self._physical_ev3.__del__()
+
     def __str__(self):
         """representation of the object in a str context"""
         return ' '.join((
-                f'{self.protocol}',
-                f'connected EV3 {self.host}',
-                f'({self.name})'
+            f'{self.protocol}',
+            f'connected EV3 {self.host}',
+            f'({self.name})'
         ))
 
     @property
@@ -744,23 +874,23 @@ class EV3:
         battery voltage [V], current [A] and percentage (as named tuple)
         """
         reply = self._physical_ev3.send_direct_cmd(
-                b''.join((
-                    opUI_Read,
-                    GET_VBATT,
-                    GVX(0),
-                    opUI_Read,
-                    GET_IBATT,
-                    GVX(4),
-                    opUI_Read,
-                    GET_LBATT,
-                    GVX(8)
-                )),
-                global_mem=9,
-                verbosity=self._verbosity,
-                sync_mode=self._sync_mode
+            b''.join((
+                opUI_Read,
+                GET_VBATT,
+                GVX(0),
+                opUI_Read,
+                GET_IBATT,
+                GVX(4),
+                opUI_Read,
+                GET_LBATT,
+                GVX(8)
+            )),
+            global_mem=9,
+            verbosity=self._verbosity,
+            sync_mode=self._sync_mode
         )
         return Battery(
-                *struct.unpack('<2fB', reply)
+            *struct.unpack('<2fB', reply)
         )
 
     @property
@@ -778,8 +908,8 @@ class EV3:
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return Memory(
-                self._physical_ev3._introspection["mem_total"],
-                self._physical_ev3._introspection["mem_free"]
+            self._physical_ev3._introspection["mem_total"],
+            self._physical_ev3._introspection["mem_free"]
         )
 
     @property
@@ -799,13 +929,13 @@ class EV3:
             self._physical_ev3.introspection(self._verbosity)
         if value != self._physical_ev3._introspection["name"]:
             self._physical_ev3.send_direct_cmd(
-                    b''.join((
-                            opCom_Set,  # operation
-                            SET_BRICKNAME,  # CMD
-                            LCS(value)  # NAME
-                    )),
-                    verbosity=self._verbosity,
-                    sync_mode=self._sync_mode
+                b''.join((
+                    opCom_Set,  # operation
+                    SET_BRICKNAME,  # CMD
+                    LCS(value)  # NAME
+                )),
+                verbosity=self._verbosity,
+                sync_mode=self._sync_mode
             )
             self._physical_ev3._introspection["name"] = value
 
@@ -813,7 +943,7 @@ class EV3:
     def network(self) -> str:
         """
         name, ip_adr and mac_adr of the EV3 device (as named tuple)
-        
+
         available only for WiFi connected devices,
         mac_adr is the address of the WiFi dongle
         """
@@ -822,9 +952,9 @@ class EV3:
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return Network(
-                self._physical_ev3._introspection["network_name"],
-                self._physical_ev3._introspection["network_ip_adr"],
-                self._physical_ev3._introspection["network_mac_adr"]
+            self._physical_ev3._introspection["network_name"],
+            self._physical_ev3._introspection["network_ip_adr"],
+            self._physical_ev3._introspection["network_mac_adr"]
         )
 
     @property
@@ -838,7 +968,7 @@ class EV3:
     def sensors(self) -> Sensors:
         """
         all connected sensors and motors at all ports (as named tuple Sensors)
-        
+
         You can address a single one by e.g.:
         ev3_dc.EV3.sensors.Port_3 or
         ev3_dc.EV3.sensors.Port_C
@@ -846,21 +976,21 @@ class EV3:
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return Sensors(
-                self._physical_ev3._introspection["sensors"][PORT_1],
-                self._physical_ev3._introspection["sensors"][PORT_2],
-                self._physical_ev3._introspection["sensors"][PORT_3],
-                self._physical_ev3._introspection["sensors"][PORT_4],
-                self._physical_ev3._introspection["sensors"][PORT_A_SENSOR],
-                self._physical_ev3._introspection["sensors"][PORT_B_SENSOR],
-                self._physical_ev3._introspection["sensors"][PORT_C_SENSOR],
-                self._physical_ev3._introspection["sensors"][PORT_D_SENSOR]
+            self._physical_ev3._introspection["sensors"][PORT_1],
+            self._physical_ev3._introspection["sensors"][PORT_2],
+            self._physical_ev3._introspection["sensors"][PORT_3],
+            self._physical_ev3._introspection["sensors"][PORT_4],
+            self._physical_ev3._introspection["sensors"][PORT_A_SENSOR],
+            self._physical_ev3._introspection["sensors"][PORT_B_SENSOR],
+            self._physical_ev3._introspection["sensors"][PORT_C_SENSOR],
+            self._physical_ev3._introspection["sensors"][PORT_D_SENSOR]
         )
 
     @property
     def sensors_as_dict(self) -> dict:
         """
         all connected sensors and motors at all ports (as dict)
-        
+
         You can address a single one by e.g.:
         ev3_dc.EV3.sensors_as_dict[ev3_dc.PORT_1] or
         ev3_dc.EV3.sensors_as_dict[ev3_dc.PORT_A_SENSOR]
@@ -873,7 +1003,7 @@ class EV3:
     def sleep(self) -> int:
         """
         idle minutes until EV3 shuts down, values from 0 to 120
-        
+
         value 0 says: never shut down
         """
         if self._physical_ev3._introspection is None:
@@ -888,13 +1018,13 @@ class EV3:
             self._physical_ev3.introspection(self._verbosity)
         if value != self._physical_ev3._introspection["sleep"]:
             self._physical_ev3.send_direct_cmd(
-                    b''.join((
-                            opInfo,  # operation
-                            SET_MINUTES,  # CMD
-                            LCX(value)  # NAME
-                    )),
-                    verbosity=self._verbosity,
-                    sync_mode=self._sync_mode
+                b''.join((
+                    opInfo,  # operation
+                    SET_MINUTES,  # CMD
+                    LCX(value)  # NAME
+                )),
+                verbosity=self._verbosity,
+                sync_mode=self._sync_mode
             )
             self._physical_ev3._introspection["sleep"] = value
 
@@ -939,7 +1069,7 @@ class EV3:
     def system(self) -> str:
         """
         system versions and build numbers (as named tuple System)
-        
+
           os_version
             operating system version
           os_build
@@ -954,11 +1084,11 @@ class EV3:
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return System(
-                self._physical_ev3._introspection["os_vers"],
-                self._physical_ev3._introspection["os_build"],
-                self._physical_ev3._introspection["fw_vers"],
-                self._physical_ev3._introspection["fw_build"],
-                self._physical_ev3._introspection["hw_vers"]
+            self._physical_ev3._introspection["os_vers"],
+            self._physical_ev3._introspection["os_build"],
+            self._physical_ev3._introspection["fw_vers"],
+            self._physical_ev3._introspection["fw_build"],
+            self._physical_ev3._introspection["hw_vers"]
         )
 
     @property
@@ -972,7 +1102,7 @@ class EV3:
     def verbosity(self, value: int):
         assert isinstance(value, int), \
             "verbosity needs to be of type int"
-        assert value >= 0 and value <= 2, \
+        assert 0 <= value <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
         self._verbosity = int(value)
 
@@ -993,24 +1123,24 @@ class EV3:
             self._physical_ev3.introspection(self._verbosity)
         if value != self._physical_ev3._introspection["volume"]:
             self._physical_ev3.send_direct_cmd(
-                    b''.join((
-                            opInfo,  # operation
-                            SET_VOLUME,  # CMD
-                            LCX(value)  # NAME
-                    )),
-                    verbosity=self._verbosity,
-                    sync_mode=self._sync_mode
+                b''.join((
+                    opInfo,  # operation
+                    SET_VOLUME,  # CMD
+                    LCX(value)  # NAME
+                )),
+                verbosity=self._verbosity,
+                sync_mode=self._sync_mode
             )
             self._physical_ev3._introspection["volume"] = value
 
     def send_direct_cmd(
-        self,
-        ops: bytes,
-        *,
-        local_mem: int = 0,
-        global_mem: int = 0,
-        sync_mode: str = None,
-        verbosity: int = None
+            self,
+            ops: bytes,
+            *,
+            local_mem: int = 0,
+            global_mem: int = 0,
+            sync_mode: str = None,
+            verbosity: int = None
     ) -> bytes:
         """
         Send a direct command to the LEGO EV3
@@ -1070,26 +1200,26 @@ class EV3:
             "value of sync_mode: " + sync_mode + " is invalid"
         assert verbosity is None or isinstance(verbosity, int), \
             "verbosity needs to be of type int"
-        assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
+        assert verbosity is None or 0 <= verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
-            
+
         if sync_mode is None:
             sync_mode = self._sync_mode
         if verbosity is None:
             verbosity = self._verbosity
         return self._physical_ev3.send_direct_cmd(
-                ops,
-                local_mem=local_mem,
-                global_mem=global_mem,
-                sync_mode=sync_mode,
-                verbosity=verbosity                
+            ops,
+            local_mem=local_mem,
+            global_mem=global_mem,
+            sync_mode=sync_mode,
+            verbosity=verbosity
         )
 
     def wait_for_reply(
-        self,
-        msg_cnt: bytes,
-        *,
-        verbosity: int = None
+            self,
+            msg_cnt: bytes,
+            *,
+            verbosity: int = None
     ) -> bytes:
         """
         Ask the LEGO EV3 for a reply and wait until it is received
@@ -1114,22 +1244,22 @@ class EV3:
             "msg_cnt must be 2 bytes long"
         assert verbosity is None or isinstance(verbosity, int), \
             "verbosity needs to be of type int"
-        assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
+        assert verbosity is None or 0 <= verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
 
         if verbosity is None:
             verbosity = self._verbosity
         return self._physical_ev3.wait_for_reply(
-                msg_cnt,
-                verbosity=verbosity
+            msg_cnt,
+            verbosity=verbosity
         )
 
     def send_system_cmd(
-        self,
-        cmd: bytes,
-        *,
-        reply: bool = True,
-        verbosity: int = None
+            self,
+            cmd: bytes,
+            *,
+            reply: bool = True,
+            verbosity: int = None
     ) -> bytes:
         """
         Send a system command to the LEGO EV3
@@ -1162,15 +1292,15 @@ class EV3:
             "reply needs to be of type bool"
         assert verbosity is None or isinstance(verbosity, int), \
             "verbosity needs to be of type int"
-        assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
+        assert verbosity is None or 0 <= verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
 
         if verbosity is None:
             verbosity = self._verbosity
         return self._physical_ev3.send_system_cmd(
-                cmd,
-                reply=reply,
-                verbosity=verbosity
+            cmd,
+            reply=reply,
+            verbosity=verbosity
         )
 
     def _wait_for_system_reply(
@@ -1202,12 +1332,12 @@ class EV3:
             "msg_cnt must be 2 bytes long"
         assert verbosity is None or isinstance(verbosity, int), \
             "verbosity needs to be of type int"
-        assert verbosity is None or verbosity >= 0 and verbosity <= 2, \
+        assert verbosity is None or 0 <= verbosity <= 2, \
             "allowed verbosity values are: 0, 1 or 2"
-            
+
         if verbosity is None:
             verbosity = self._verbosity
         return self._physical_ev3._wait_for_system_reply(
-                msg_cnt,
-                verbosity=verbosity
+            msg_cnt,
+            verbosity=verbosity
         )

@@ -242,27 +242,27 @@ Some remarks:
     values for :py:attr:`~ev3_dc.TwoWheelVehicle.ramp_up` and
     :py:attr:`~ev3_dc.TwoWheelVehicle.ramp_down`.
 
-Controlled Movements
-====================
+Regulated Movements
+===================
 
 A parcours, which the vehicle follows, is one option for driving a
-vehicle. Another option are controlled movements, where sensors or a
+vehicle. Another option are regulated movements, where sensors or a
 person take over the vehicle's control. In a car the instruments of
-control are the steering wheel, the gas pedal and others. Class
+regulation are the steering wheel, the gas pedal and others. Class
 :py:class:`~ev3_dc.TwoWheelVehicle` provides method
-:py:meth:`~ev3_dc.TwoWheelVehicle.move` for this option and this
-method knows only two arguments, speed and turn. The sign of argument
-*speed* sets the movement's direction (forwards or
-backwards). Argument *turn* is a bit more complicated. It may vary
-between -200 and 200. Here are some special values explained:
+:py:meth:`~ev3_dc.TwoWheelVehicle.move` for this and method *move*
+knows only two arguments, speed and turn. The sign of argument *speed*
+sets the movement's direction (forwards or backwards). Argument *turn*
+is a bit more complicated. It may vary between -200 and 200. Here are
+explanations for some special values of *turn*:
 
   - -200: circle right on place
   - -100: turn right with unmoved right wheel
-  - 0  : straight
+  - 0: straight
   - 100: turn left with unmoved left wheel
   - 200: circle left on place
 
-Now let's demonstrate it with a real thing. Connect your EV3 brick and
+Now let's demonstrate it with a program. Connect your EV3 brick and
 your computer via WiFi, replace the MAC-address by the one of your EV3
 brick, connect the left wheel motor (medium or large) with PORT A and
 the right wheel motor with PORT D, replace the values of
@@ -272,35 +272,40 @@ start this program in a terminal (not in an interactive python shell):
 .. code:: python3
 
   import curses
-  import ev3_dc as ev3
-      
-  def react(c: int, speed: int, turn: int) -> tuple:
-      '''
-      reacts on keyboard arrow key events by modifying speed and turn
-      '''
-      if c == curses.KEY_LEFT:
-          turn += 5
-          turn = min(turn, 200)
-      elif c == curses.KEY_RIGHT:
-          turn -= 5
-          turn = max(turn, -200)
-      elif c == curses.KEY_UP:
-          speed += 5
-          speed = min(speed, 100)
-      elif c == curses.KEY_DOWN:
-          speed -= 5
-          speed = max(speed, -100)
-      return speed, turn
+  import ev3_dc as ev3    
+  
   
   def main(stdscr) -> None:
       '''
       controls terminal and keyboard events
       '''
+      def react():
+          '''
+          reacts on keyboard arrow key events by modifying speed and turn
+          '''
+          nonlocal speed, turn
+          if c == curses.KEY_LEFT:
+              turn += 5
+              turn = min(turn, 200)
+          elif c == curses.KEY_RIGHT:
+              turn -= 5
+              turn = max(turn, -200)
+          elif c == curses.KEY_UP:
+              speed += 5
+              speed = min(speed, 100)
+          elif c == curses.KEY_DOWN:
+              speed -= 5
+              speed = max(speed, -100)
+              
+      # initialize terminal
+  
       stdscr.clear()
       stdscr.refresh()
       stdscr.addstr(0, 0, 'use Arrows to navigate your vehicle')
       stdscr.addstr(1, 0, 'pause your vehicle with key <p>')
       stdscr.addstr(2, 0, 'terminate with key <q>')
+      
+      # control vehicle movement and visualize it
   
       speed = 0
       turn = 0
@@ -311,15 +316,15 @@ start this program in a terminal (not in an interactive python shell):
           host='00:16:53:42:2B:99'
       ) as my_vehicle:
           while True:
-              c = stdscr.getch()
+              c = stdscr.getch()  # catch keyboard event
               if c in (
                   curses.KEY_RIGHT,
                   curses.KEY_LEFT,
                   curses.KEY_UP,
                   curses.KEY_DOWN
               ):
-                  speed, turn = react(c, speed, turn)
-                  my_vehicle.move(speed, turn)
+                  react()
+                  my_vehicle.move(speed, turn)  # modify movement
                   stdscr.addstr(
                       4,
                       0,
@@ -328,7 +333,7 @@ start this program in a terminal (not in an interactive python shell):
               elif c == ord('p'):
                   speed = 0
                   turn = 0
-                  my_vehicle.stop()
+                  my_vehicle.stop()  # stop movement
                   pos = my_vehicle.position
                   stdscr.addstr(
                       4,
@@ -336,29 +341,32 @@ start this program in a terminal (not in an interactive python shell):
                       f'x: {pos.x:5.2f} m, y: {pos.y:5.2f} m, o: {pos.o:4.0f} °'
                   )
               elif c in (ord('q'), 27):
-                  my_vehicle.stop()
+                  my_vehicle.stop()  # finally stop movement
                   break
   
   curses.wrapper(main)
-  
+    
 Some remarks:
 
+  - This program is a simple remote control, that uses the arrow keys
+    of the terminal to modify the vehicle's movement. Key <p> pauses
+    the movement, key <q> quits it.
   - Python standard module `curses
     <https://docs.python.org/3/library/curses.html>`_ is kind of
-    old-fashioned because it works with a terminal instead of a
-    graphical interface.
-  - curses takes the control over the terminal and the
-    keyboard. With *stdscr.getch()* it catches the keyboard events
-    and reacts on the arrow keys.
+    old-fashioned because it uses a terminal instead of a graphical
+    interface.
+  - *curses* takes the control over the terminal and the
+    keyboard. With *stdscr.getch()* it catches the keyboard events and
+    reacts on the arrow keys.
   - Function *react* does the real stuff. It modifies either
     *speed* or *turn*.
-  - This program uses two methods of class *TwoWheelVecicle*: *move*
+  - This program uses two methods of class *TwoWheelVehicle*: *move*
     and *stop*.
-  - Method *move* is called whenever an array key event occurs. One
-    movement replaces (or interrupts) the last one.
+  - Method *move* is called whenever an array key event occurs. The
+    next movement replaces (or interrupts) the last one.
   - The movement seems to be smooth even when *speed* and *turn*
     change in steps of 5.
   - Whenever the movement pauses, the program shows the vehicle's
     current position, which demonstrates, that the tracking works with
-    controlled movements too.
+    regulated movements too.
     

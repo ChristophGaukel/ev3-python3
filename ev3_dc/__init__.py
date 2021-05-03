@@ -3,18 +3,22 @@
 LEGO EV3 direct commands
 '''
 
-from .pid import PID
+from .constants import *
+from .exceptions import DirCmdError, SysCmdError
 from .functions import (
     LCX,
     LCS,
     LVX,
     GVX,
-    port_motor_input
+    port_motor_input,
+    pid
 )
-from .constants import *
+
+# base class
 from .ev3 import EV3
 
 # subclasses of EV3
+from .color import Color
 from .file import FileSystem
 from .motor import Motor
 from .sound import (
@@ -33,6 +37,4 @@ from .vehicle import (
         VehiclePosition,
         MotorPositions
 )
-from .color import Color
 
-from .exceptions import DirCmdError, SysCmdError

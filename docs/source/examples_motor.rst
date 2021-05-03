@@ -235,7 +235,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
 
 The output:
 
-.. code:: none
+.. code-block:: none
 
   defaults of speed: 10%, ramp_up: 15° and ramp_down: 15°
 
@@ -278,7 +278,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
 
 The output:
 
-.. code:: none
+.. code-block:: none
 
   defaults of speed: 10%, ramp_up_time: 0.15 sec. and ramp_down_time: 0.15 sec.
   

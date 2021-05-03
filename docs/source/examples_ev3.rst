@@ -86,7 +86,7 @@ computer has an Ubuntu 20.10 operating system) had to comment out the
 last line in file */etc/bluetooth/main.conf* (which needs superuser
 access rights):
 
-.. code:: none
+.. code-block:: none
 
   # AutoEnable defines option to enable all controllers when they are found.
   # This includes adapters present on start as well as adapters that are plugged
@@ -110,7 +110,7 @@ of your EV3, then run this program:
 
 My output was:
 
-.. code:: none
+.. code-block:: none
 
   Bluetooth connected EV3 00:16:53:42:2B:99 (Hugo)
 
@@ -139,7 +139,7 @@ this program:
 
 As you may have expected, my program's output was:
 
-.. code:: none
+.. code-block:: none
 
   WiFi connected EV3 00:16:53:42:2B:99 (Hugo) 
 
@@ -562,7 +562,7 @@ device, select the protocol you prefer, then start this program:
 
 This program's output:
 
-.. code:: none
+.. code-block:: none
 
   this EV3 device is connected via USB
 
@@ -586,7 +586,7 @@ device, select the protocol you prefer, then start this program:
 
 This program's output:
 
-.. code:: none
+.. code-block:: none
 
   00:16:53:42:2B:99 is the MAC-address of this EV3 device
 
@@ -611,7 +611,7 @@ device, select the protocol you prefer, then start this program:
 
 This program's output:
 
-.. code:: none
+.. code-block:: none
 
   19:45:30.891798 Sent 0x|0E:00|2A:00|00|09:00|81:01:60:81:02:64:81:12:68|
   19:45:30.898732 Recv 0x|0C:00|2A:00|02|7C:03:F1:40:40:07:3B:3E:64|
@@ -658,7 +658,7 @@ device, select the protocol you prefer, then start this program:
   
 This program's output:
 
-.. code:: none
+.. code-block:: none
 
   protocol USB's default sync_mode is SYNC
   19:28:11.184508 Sent 0x|0D:00|2B:00|00|00:00|D4:08:84:48:75:67:6F:00|
@@ -691,7 +691,7 @@ Now let's change the program and explicitly set *sync_mode = STD*:
   
 This program's output:
 
-.. code:: none
+.. code-block:: none
 
   protocol USB's default sync_mode is SYNC
   19:34:35.935427 Sent 0x|0D:00|2B:00|80|00:00|D4:08:84:48:75:67:6F:00|
