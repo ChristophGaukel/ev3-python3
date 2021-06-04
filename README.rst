@@ -1,9 +1,10 @@
 ev3-python3
 =============
 
-Use python3 to program your LEGO Mindstorms EV3. The program runs on the local host
-and sends direct commands to the EV3 device. It communicates via bluetooth, WiFi or USB.
-I wrote a `blog <http://ev3directcommands.blogspot.com>`_ about this code.
+Use python3 to program your LEGO Mindstorms EV3. The program runs on
+the local host and sends direct commands to the EV3 device. It
+communicates via bluetooth, WiFi or USB.  I wrote a `blog
+<http://ev3directcommands.blogspot.com>`_ about this code.
 
 There is no need to boot the EV3 device from an SD Card or manipulate
 its software. You can use it as it is, the EV3 is designed to execute
@@ -23,15 +24,14 @@ Examples
 Writing and sending direct commands
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This program communicates via USB with an EV3 device (mac-address:
-'00:16:53:42:2B:99', replace it by the the mac-address of your EV3)
+This program communicates via USB with an EV3 device
 and plays a tone with a frequency of 440 Hz for a duration of 1 sec.
 
 ::
 
   import ev3_dc as ev3
 
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   ops = b''.join((
       ev3.opSound,
@@ -59,9 +59,10 @@ Method **play_tone** of class **Jukebox** also plays tones:
   jukebox.verbosity = 1
   jukebox.play_tone("a'", duration=1)
 
-This program does the very same thing via bluetooth! Before you can
+This program does the very same thing via Bluetooth! Before you can
 run it, you need to pair the two devices (the computer, that
-executes the program and the EV3 brick). The output::
+executes the program and the EV3 brick) and replace the MAC-address
+``00:16:53:42:2B:99`` by the one of your EV3. The output::
 
   11:55:11.324701 Sent 0x|0E:00|2A:00|80|00:00|94:01:01:82:B8:01:82:E8:03|
 
@@ -69,15 +70,19 @@ executes the program and the EV3 brick). The output::
 Independent Tasks
 ~~~~~~~~~~~~~~~~~
 
-Specialized classes (e.g. class **Jukebox**) provide factory methods,
-that return thread tasks. Thread tasks allow to start, stop and
+Specialized classes (e.g. class `Jukebox
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#jukebox>`_)
+provide factory methods,
+which return a `thread_task.Task
+<https://thread_task.readthedocs.io/en/latest/>`.
+Thread tasks allow to start, stop and
 continue independent tasks.
 
 ::
 
   import ev3_dc as ev3
 
-  jukebox = ev3.Jukebox(protocol=ev3.WIFI, host='00:16:53:42:2B:99')
+  jukebox = ev3.Jukebox(protocol=ev3.WIFI)
   antemn = jukebox.song(ev3.EU_ANTEMN)
 
   antemn.start()
@@ -93,9 +98,57 @@ Some remarks:
     <https://thread_task.readthedocs.io/en/latest/>`_ object, which
     can be started, stopped and continued. It plays tones and changes
     the LED-colors.
-  - Starting the thread task does not block the program nor does it
+  - Starting a thread task does not block the program nor does it
     block the EV3 brick. It runs in the background and allows to do
     additional things parallel.
+  - Alternatively, you can start a thread task without mutlithreading
+    by ``antemn.start(thread=False)``. This makes it behave like any
+    normal callable.
+
+
+Specialized Subclasses handle Sensors and Motors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Specialized subclasses of class as `EV3
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#ev3>`_),
+like `Touch
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#touch>`_,
+`Infrared
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#infrared>`_,
+`Ultrasonic
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#ultrasonic>`_,
+`Color
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#color>`_,
+`Motor
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#motor>`_,
+or `TwoWheelVehicle
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#twowheelvehicle>`_
+handle motors and sensors. You can use multiple of these objects
+parallel and all them can share a single physical EV3 device. You can
+also build complex robots with more than one EV3 device and control
+the robot easily by a single python program.
+
+::
+
+  import ev3_dc as ev3
+  
+  with ev3.Touch(ev3.PORT_1, protocol=ev3.USB) as touch_1:
+      touch_4 = ev3.Touch(ev3.PORT_4, ev3_obj=touch_1)
+      for touch in touch_1, touch_4:
+          print(str(touch) + ':', end=' ')
+          print('touched' if touch.touched else 'not touched')
+
+Some remarks:
+  - Class `EV3
+    <https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#ev3>`_
+    and all its subclasses support the with statement.
+  - touch_4 uses the connection of touch_1. This is done by setting
+    keyword argument ``ev3_obj=touch_1``.
+  - If more than a single EV3 device ist connected via USB, this
+    program will fail. For this case use keyword argument host
+    (e.g. ``ev3.Touch(ev3.PORT_1, protocol=ev3.USB,
+    host='00:16:53:42:2B:99')``) to identify the device (for protocol
+    BLUETOOTH keyword argument host is mandatory).
 
 Read `ev3_dc.readthedocs.io
 <https://ev3_dc.readthedocs.io/en/latest/>`_ for more details.

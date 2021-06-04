@@ -10,7 +10,9 @@ Examples
    examples_infrared
    examples_ultrasonic
    examples_color
+   examples_sound
    examples_jukebox
+   examples_voice
    examples_motor
    examples_twowheelvehicle
    examples_filesystem

@@ -1,6 +1,6 @@
-+++++++++++++++++
+#################
 Two Wheel Vehicle
-+++++++++++++++++
+#################
 
 .. role:: python(code)
    :language: python3
@@ -18,8 +18,9 @@ to ask for the current position and the current orientation of the
 vehicle.
 
 
++++++++++++
 Calibration
-===========
++++++++++++
 
 Class *TwoWheelVehicle* does the tracking by frequently reading the
 current motor positions of both wheels and then updating the vehicle's
@@ -35,7 +36,7 @@ Therefore we start with two small programs, which allow to determine
 first the radius, then the tread.
 
 Determine the wheel's radius
-----------------------------
+============================
 
 Construct a vehicle with two drived wheels, connect your EV3 brick and
 your computer via WiFi, replace the MAC-address by the one of your EV3
@@ -77,7 +78,7 @@ Some remarks:
     this object and set its keyword argument *thread* to value *False*.
 
 Determine the wheel's tread
----------------------------
+===========================
 
 Now you know the effective radius of your vehicle's wheels but you
 need to know the effective width of the vehicle's tread too. Replace
@@ -119,8 +120,9 @@ Some remarks:
     where the grip occurs, which says: the tread width varies.
 
 
++++++++++++++++
 Precise Driving
-===============
++++++++++++++++
 
 Two methods :py:meth:`~ev3_dc.TwoWheelVehicle.drive_straight` and
 :py:meth:`~ev3_dc.TwoWheelVehicle.drive_turn` allow to specify a
@@ -128,11 +130,13 @@ series of movements, which the vehicle will follow. Maybe you know
 `turtle <https://docs.python.org/3/library/turtle.html#turtle.home>`_
 from the standard python library. Here is a robotic pendant.
 
-Connect your EV3 brick and your computer via WiFi, replace the
-MAC-address by the one of your EV3 brick, connect the left wheel motor
-(medium or large) with PORT A and the right wheel motor with PORT D,
-replace the values of *radius_wheel* and *tread* with the values from
-your calibration, then start this program:
+Define a Parcours
+=================
+
+Connect your EV3 brick and your computer via WiFi, connect the left
+wheel motor (medium or large) with PORT A and the right wheel motor
+with PORT D, replace the values of *radius_wheel* and *tread* with the
+values from your calibration, then start this program:
 
 .. code:: python3
 
@@ -141,8 +145,7 @@ your calibration, then start this program:
   with ev3.TwoWheelVehicle(
       0.01518,  # radius_wheel
       0.11495,  # tread
-      protocol=ev3.WIFI,
-      host='00:16:53:42:2B:99',
+      protocol=ev3.WIFI
   ) as my_vehicle:
       parcours = (
           my_vehicle.drive_straight(0.5) +
@@ -171,8 +174,106 @@ Some remarks:
     the three angles and start the program again. Then the triangle
     will be drived clockwise.
 
+Sensor controlled Driving
+=========================
+
+This example is a more demanding one. It demontrates how to control a
+thread task by calling its methods *stop* and *cont* and how to do
+this inside a thread task.
+
+Modify your vehicle and place an infrared sensor on it, which directs
+forwards. Connect the infrared sensor with port 2, then connect your
+EV3 brick and your computer with the WiFi and start this program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  from thread_task import (
+      Task,
+      Repeated,
+      Periodic,
+      STATE_STARTED,
+      STATE_FINISHED,
+      STATE_STOPPED,
+  )
+  
+  with ev3.TwoWheelVehicle(
+      0.0210,  # radius_wheel
+      0.1224,  # tread
+      protocol=ev3.WIFI,
+      speed=40
+  ) as vehicle:
+      infrared = ev3.Infrared(ev3.PORT_2, ev3_obj=vehicle)
+      
+      parcours = (
+          Repeated(
+              vehicle.drive_turn(360, 0.2) +
+              vehicle.drive_turn(-360, 0.2),
+              num=2
+          )
+      )
+      
+      def keep_care():
+          curr_state = parcours.state
+          if curr_state == STATE_FINISHED:
+              return True  # all done
+  
+          dist = infrared.distance
+          if (
+              curr_state == STATE_STARTED and
+              (dist is not None and dist < 0.1)
+          ):
+              parcours.stop()
+          elif (
+              curr_state == STATE_STOPPED and
+              (dist is None or dist >= 0.1)
+          ):
+              parcours.cont()
+  
+          return False  # call me again
+      
+      (
+          Task(parcours.start) +
+          Periodic(
+              0.1,  # interval
+              keep_care
+          )
+      ).start(thread=False)
+
+Some remarks:
+
+  - the parcours is a lying eight, build from two circles and wrapped
+    in a Repeated, which makes the vehicle to drive it two times. This
+    says: the vehicle drives two times alongside a lying eight.
+  - function *keep_care* controls the vehicle's movement and it does
+    three things:
+
+    - it tests if the vehicle already has finished the parcours. If
+      so, it ends the Periodic, which called it.
+    - it tests if the vehicle currently is driving (STATE_STARTED) though
+      there is a barrier close in front of the sensor. If so, it stops
+      the driving (read `stopping
+      <https://thread-task.readthedocs.io/en/latest/examples.html#stopping>`_
+      for the details).  
+    - it tests if the vehicle currently is stopped (STATE_STOPPED)
+      though the infrared sensor does not see something closer than
+      0.1 m. If so, it lets the vehicle continue its movement (read
+      `continue
+      <https://thread-task.readthedocs.io/en/latest/examples.html#continue>`_
+      for the details).
+
+  - to understand the details of function *keep_care*, you need to
+    understand, how a Periodic works (read `Periodic actions
+    <https://thread-task.readthedocs.io/en/latest/examples.html#periodic-actions>`_
+    for the details).
+  - *Task(parcours.start)* starts the parcours in its own thread, which says: driving
+    the parcours and reading the sensor happen parallel in different threads.
+  - the *Periodic* calls function *keep_care* ten times per second, which is often
+    enough to stop the vehicle before it collides with a barrier.
+	  
+++++++++
 Tracking
-========
+++++++++
 
 Class *TwoWheelVehicle* tracks the vehicle's position and orientation.
 Property :py:attr:`~ev3_dc.TwoWheelVehicle.position` tells the current
@@ -242,8 +343,9 @@ Some remarks:
     values for :py:attr:`~ev3_dc.TwoWheelVehicle.ramp_up` and
     :py:attr:`~ev3_dc.TwoWheelVehicle.ramp_down`.
 
++++++++++++++++++++
 Regulated Movements
-===================
++++++++++++++++++++
 
 A parcours, which the vehicle follows, is one option for driving a
 vehicle. Another option are regulated movements, where sensors or a

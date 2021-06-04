@@ -14,7 +14,7 @@ allows to use sounds and light effects parallel to other activities.
 Change Color
 ~~~~~~~~~~~~
 
-Instead of coding a direct command, like we do in
+Instead of coding a direct command, like we did in
 :ref:`changing_led_colors_label`, you can do the same thing a bit more
 comfortable.
 
@@ -52,11 +52,13 @@ Obviously, :py:class:`~ev3_dc.Jukebox` sends direct commands.
 Play Tone
 ~~~~~~~~~
 
-Sound is the other competence of class
-:py:class:`~ev3_dc.Jukebox`. Method
-:py:meth:`~ev3_dc.Jukebox.play_tone` allows to play tones 
-like *c*, *d*, *e* or *c'*, *d'*, *e'* without
-knowing the frequencies.
+Playing tones is the other competence of class
+:py:class:`~ev3_dc.Jukebox`. Different from method
+:py:meth:`~ev3_dc.Sound.tone` of class :py:class:`~ev3_dc.Sound`,
+these tones are defined by their musical names and not by their
+frequencies. Method :py:meth:`~ev3_dc.Jukebox.play_tone` allows to
+name them *c*, *d*, *e*, *c'*, *d'* or *e'*. One does not need to know
+their frequencies.
 
 Connect your EV3 brick and your computer via Bluetooth, replace the
 MAC-address by the one of your EV3 brick, then start this program
@@ -72,94 +74,16 @@ MAC-address by the one of your EV3 brick, then start this program
 
 This plays f³ for one second at maximum volume (f³ is the highest tone
 of Mozart's *Queen of the night aria*). If no duration is given,
-METHOD play_tone plays the tone unlimited. If no volume is given it
-takes the volume, which can be set as a property of class Jukebox and
-is 1 by default.
+method :py:meth:`~ev3_dc.Jukebos.play_tone` plays the tone
+unlimited. If no volume is given, it takes the volume, which was set as
+an optional argument of class Jukebox's creation. If neither was set,
+it takes the volume from the device.
 
 The output:
 
 .. code-block:: none
 
   13:13:49.071839 Sent 0x|0F:00|2A:00|80|00:00|94:01:81:64:82:75:05:82:E8:03|
-
-
-Play Sound
-~~~~~~~~~~
-
-Connect your EV3 brick and your computer via Bluetooth, replace the
-MAC-address by the one of your EV3 brick, then start this program:
-
-.. code:: python3
-
-  import ev3_dc as ev3
-  from time import sleep
-  
-  jukebox = ev3.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
-  jukebox.verbosity = 1
-  
-  jukebox.play_sound(
-      './ui/DownloadSucces',
-      volume=100,
-      repeat=True
-  )
-  
-  sleep(5)
-  
-  jukebox.stop_sound()
-
-Some remarks:
-
-  - The program plays a sound file repeatedly and stops the sound after 5 sec. This is
-    exactly, what program :ref:`playing_sound_files_repeatedly_label` does.
-  - It needs another direct command to stop the playing.
-
-The output:
-
-.. code-block:: none
-
-  13:45:30.663648 Sent 0x|1E:00|2A:00|80|00:00|94:03:81:64:84:2E:2F:75:69:2F:44:6F:77:6E:6C:6F:61:64:53:75:63:63:65:73:00|
-  13:45:35.669587 Sent 0x|07:00|2B:00|80|00:00|94:00|
-
-
-Sound as a Thread Task
-~~~~~~~~~~~~~~~~~~~~~~
-
-`thread_task <https://thread-task.readthedocs.io/en/latest>`_ objects allow
-to do the timing inside and they allow to do multiple things
-parallel.
-
-Connect your EV3 brick and your computer via Bluetooth, replace the
-MAC-address by the one of your EV3 brick, then start this program:
-
-.. code:: python3
-
-  import ev3_dc as ev3
-  
-  jukebox = ev3.Jukebox(protocol=ev3.BLUETOOTH, host='00:16:53:42:2B:99')
-  jukebox.verbosity = 1
-  
-  t_sound = jukebox.sound(
-      './ui/DownloadSucces',
-      volume=100,
-      duration=5,
-      repeat=True
-  )
-  
-  t_sound.start()
-
-Some remarks:
-
-  - method :py:meth:`~ev3_dc.Jukebox.sound` returns a thread task object, we name it *t_sound*.
-  - *t_sound* can be started, stopped, continued and restarted. We only start it.
-  - *t_sound* runs in the background. If you add some more commands to this program, you will
-    see, they are executed parallel to *t_sound*.
-
-The output:
-
-.. code-block:: none
-
-  14:06:40.170520 Sent 0x|1E:00|2A:00|80|00:00|94:03:81:64:84:2E:2F:75:69:2F:44:6F:77:6E:6C:6F:61:64:53:75:63:63:65:73:00|
-  14:06:45.170841 Sent 0x|07:00|2B:00|80|00:00|94:00|
 
 
 

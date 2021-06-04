@@ -7,9 +7,11 @@ File System
 
 :py:class:`~ev3_dc.FileSystem` is a subclass of
 :py:class:`~ev3_dc.EV3`.  It uses system commands and allows to
-operate on EV3's file system. You can read, write and delete files and
-directories. Please take care, you can damage the software of
-your EV3 brick.
+operate on EV3's file system (read LEGO's `Communication Developer Kit
+<https://www.lego.com/cdn/cs/set/assets/blt6879b00ae6951482/LEGO_MINDSTORMS_EV3_Communication_Developer_Kit.pdf>`_
+for the details). You can read, write and delete files and
+directories. Please take care, you can damage the software of your EV3
+brick.
 
 
 Method list_dir

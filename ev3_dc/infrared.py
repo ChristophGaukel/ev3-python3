@@ -13,11 +13,10 @@ from .constants import (
     PORT_4,
     opInput_Device,
     READY_RAW,
-    READY_SI,
     EV3_IR
 )
 from .functions import LCX, GVX
-from .exceptions import SensorError
+from .exceptions import SensorError, PortInUse
 
     
 Beacon = namedtuple('Beacon', [
@@ -85,6 +84,10 @@ class Infrared(EV3):
         if self.sensors_as_dict[self._port] != EV3_IR:
             port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
             raise SensorError('no EV3_IR sensor connected at ' + port_str)
+        if self._physical_ev3._introspection["sensors"][self._port]['used_by'] is not None:
+            port_str = 'PORT_' + str(1 + struct.unpack("<B", self._port)[0])
+            host_str = self._physical_ev3._host
+            raise PortInUse(f'{port_str} of {host_str} already in use')
         
     def __str__(self):
         """description of the object in a str context"""
@@ -94,6 +97,20 @@ class Infrared(EV3):
                 f'at {port_str}',
                 f'of {super().__str__()}'
         ))
+
+    def __del__(self):
+        """
+        handle specific logic for deletion
+        """
+        self._physical_ev3._introspection["sensors"][self._port]['used_by'] = None
+        super().__del__()
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        """
+        handle specific logic when exit with block
+        """
+        self._physical_ev3._introspection["sensors"][self._port]['used_by'] = None
+        super().__exit__(exc_type, exc_value, exc_traceback)
 
     @property
     def port(self) -> bytes:

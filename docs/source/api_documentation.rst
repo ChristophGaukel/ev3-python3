@@ -131,13 +131,42 @@ NXT-Color. It uses modes *EV3-Color-Reflected*,
    :members:
 
 
+Sound
+~~~~~
+
+Sound is a subclass of EV3 and provides higher order methods for
+the EV3 sound.
+
+.. autoclass:: ev3_dc.Sound
+   :members:
+
+
 Jukebox
 ~~~~~~~
 
-Jukebox is a subclass of EV3 and provides higher order methods for
-sound and LEDs.
+Jukebox is a subclass of Sound and provides higher order methods for
+tones and LEDs.
 
 .. autoclass:: ev3_dc.Jukebox
+   :members:
+
+
+Voice
+~~~~~
+
+Voice is a subclass of Sound and provides higher order methods for
+speaking. It supports `text to speech
+<https://en.wikipedia.org/wiki/Speech_synthesis>`_ and calls `gTTS
+<https://gtts.readthedocs.io/en/latest/index.html>`_, which needs an
+internet connection. *Voice* allows to select the language, the top
+level domain and a slower reading speed by supporting *gTTS*'s
+attributes *lang*, *tld* and *slow*.
+
+*gTTS* answers with mp3 data, therefore *Voice* calls `ffmpeg
+<https://ffmpeg.org/>`_ to convert mp3 to pcm. If *ffmpeg* is not
+installed on your system, *Voice* will not work.
+
+.. autoclass:: ev3_dc.Voice
    :members:
       
 

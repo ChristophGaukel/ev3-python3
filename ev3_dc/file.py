@@ -2,7 +2,9 @@
 LEGO Mindstorms EV3 direct commands - filesystem
 """
 
+import os
 import struct
+import hashlib
 from ev3_dc import EV3
 from .functions import (
     LCS,
@@ -44,7 +46,7 @@ class FileSystem(EV3):
                 f'of {super().__str__()}'
         ))
 
-    def write_file(self, path: str, data: bytes) -> None:
+    def write_file(self, path: str, data: bytes, *, check: bool = True) -> None:
         """
         Create a file in EV3's file system and write data into it
 
@@ -55,13 +57,39 @@ class FileSystem(EV3):
             of the file
           data
             data to write into the file
+
+        Optional keyword only arguments
+
+          check
+            flag for check if file already exists with identical MD5 checksum
         """
         assert isinstance(path, str), \
             'path needs to be of type str'
         assert isinstance(data, bytes), \
             "data needs to be of type bytes"
+        assert isinstance(check, bool), \
+            'check needs to be of type bool'
 
         size = len(data)
+
+        if check:
+            # check if identic file already exists
+            dir_dest = '/'.join(path.split('/')[:-1])
+            file_dest = path.split('/')[-1]
+            try:
+                folders, files = self.list_dir(dir_dest)
+            except SysCmdError:
+                raise SysCmdError('directory ' + path_dest_dir + ' does not exist')
+
+            data_md5 = None
+            for curr_name, curr_size, curr_md5 in files:
+                if curr_size == size:
+                    if data_md5 is None:
+                        data_md5 = hashlib.md5(data).hexdigest().upper()
+                    if data_md5 == curr_md5:
+                        # identic size and md5 hash
+                        return
+
         cmd = b''.join((
             BEGIN_DOWNLOAD,
             struct.pack('<I', size),      # SIZE
@@ -105,6 +133,109 @@ class FileSystem(EV3):
                     path +
                     " not reached"
                 )
+
+    def load_file(self, path_source: str, path_dest: str, *, check: bool = True) -> None:
+        """
+        Copy a local file to EV3's file system
+
+
+        Mandatory positional arguments
+
+          path_source
+            absolute or relative path of the existing file
+            in the local file system
+          path_dest
+            absolute or relative path (from "/home/root/lms2012/sys/")
+            in EV3's file system
+
+        Optional keyword only aguments
+
+          check
+            flag for check if file already exists with identical MD5 checksum
+        """
+        assert isinstance(path_source, str), \
+            'path_source needs to be of type str'
+        assert isinstance(path_dest, str), \
+            'path_dest needs to be of type str'
+        assert isinstance(check, bool), \
+            'check needs to be of type bool'
+
+        # file size
+        size = os.path.getsize(path_source)
+
+        if check:
+            # check if identic file already exists
+            dir_dest = '/'.join(path_dest.split('/')[:-1])
+            file_dest = path_dest.split('/')[-1]
+            try:
+                folders, files = self.list_dir(dir_dest)
+            except SysCmdError:
+                raise SysCmdError('directory ' + path_dest_dir + ' does not exist')
+            for curr_name, curr_size, curr_md5 in files:
+                if curr_name == file_dest:
+                    if curr_size == size:
+                        # identic name and size
+                        md5_hash = hashlib.md5()
+                        with open(path_source, 'rb') as f:
+                            chunk = f.read(4096)
+                            while chunk:
+                                md5_hash.update(chunk)
+                                chunk = f.read(4096)
+                        if md5_hash.hexdigest().upper() == curr_md5:
+                            # identic name, size and md5 hash
+                            return
+                    break
+
+        # get file handle
+        reply = self.send_system_cmd(
+            b''.join((
+                BEGIN_DOWNLOAD,
+                struct.pack('<I', size),      # SIZE
+                str.encode(path_dest) + b'\x00'    # NAME
+            ))
+        )
+        rc, handle = struct.unpack('sB', reply)
+        if rc != SYSTEM_REPLY_OK:
+            raise SysCmdError(
+                "error " +
+                '{:02X}'.format(rc) +
+                " when writing file " +
+                path
+            )
+
+        # open file and copy in parts of 1017 bytes
+        with open(path_source, 'rb') as f:
+            while True:
+                part = f.read(1017)
+                if not part:
+                    raise SysCmdError(
+                        "reached end of file " +
+                        path_source
+                    )
+                    break
+                fmt = 'B' + str(len(part)) + 's'
+                reply = self.send_system_cmd(
+                    b''.join((
+                        CONTINUE_DOWNLOAD,
+                        struct.pack(
+                            fmt,
+                            handle,
+                            part
+                        )
+                    ))
+                )
+                rc, handle = struct.unpack('sB', reply)
+
+                # all done?
+                if rc == SYSTEM_END_OF_FILE:
+                    break
+                elif rc != SYSTEM_REPLY_OK:
+                    raise SysCmdError(
+                        "error " +
+                        '{:02X}'.format(rc) +
+                        " when writing file " +
+                        path_dest
+                    )
 
     def read_file(self, path: str) -> bytes:
         """

@@ -1,6 +1,6 @@
------
+#####
 Touch
------
+#####
 
 :py:class:`~ev3_dc.Touch` is a subclass of :py:class:`~ev3_dc.EV3`.
 You can use it to read values from a single touch sensor without any knowledge of direct
@@ -9,94 +9,78 @@ command syntax.
 To use multiple touch sensors, you can create multiple instances of class Touch.
 
 
+++++++++++++++++++++++++++++
 Asking for the current state
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+++++++++++++++++++++++++++++
 
-Attribute :py:attr:`~ev3_dc.Touch.touched` is of type bool and tells,
+Property :py:attr:`~ev3_dc.Touch.touched` is of type bool and tells,
 if the sensor currently is touched.
 
-Connect your EV3 device with your local network via WiFi.
-Replace the MAC-address by the one of your EV3 brick, connect a touch sensor
-(it may be an EV3-Touch or a NXT-Touch)
-with PORT 1, then start this program.
+Connect your EV3 device with your local network via WiFi and make
+sure, it's the only EV3 devices in the network. Connect a touch
+sensor (it may be an EV3-Touch or a NXT-Touch) with PORT 1, then start
+this program.
             
 
 .. code:: python3
 
   import ev3_dc as ev3
   
-  my_touch = ev3.Touch(
-      ev3.PORT_1,
-      protocol=ev3.WIFI,
-      host='00:16:53:42:2B:99'
-  )
-  is_touched = my_touch.touched
-
-  print(str(my_touch) + ':')
-  print(
-      'currently touched' if is_touched else 'currently not touched'
-  )
+  with ev3.Touch(ev3.PORT_1, protocol=ev3.WIFI) as my_touch:
+      print(str(my_touch) + ':', end=' ')
+      print('touched' if my_touch.touched else 'not touched')
     
 Some remarks:
 
-  - You already know, how to change the program, when using protocols
+  - You already know, how to modify the program, when using protocols
     Bluetooth or USB.
-  - As the first output line shows, the class knows it's sensor type.
+  - As the output line shows, the class knows it's sensor type.
   - Run the program multiple times with touched and not touched sensor.
   - Test what happens, when no sensor is connected to PORT 1.
   - Test what happens, when another sensor type is connected to PORT 1.
   - Switch on verbosity and you will see the communication data.
 
 
++++++++++++++++++++++++++++++++++
 Multiple instances of class Touch
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++++++++++++++++++++++++++++++++++
 
-Connect another touch sensor
-(again it may be an EV3-Touch or a NXT-Touch)
-with PORT 4, then start this program.
+Connect an additional touch sensor (again it may be an EV3-Touch or a
+NXT-Touch) with PORT 4, then start this program.
             
 
 .. code:: python3
 
   import ev3_dc as ev3
   
-  touch_left = ev3.Touch(
-      ev3.PORT_1,
-      protocol=ev3.WIFI,
-      host='00:16:53:42:2B:99'
-  )
-  
-  touch_right = ev3.Touch(
-      ev3.PORT_4,
-      ev3_obj=touch_left
-  )
-  
-  is_touched_left = touch_left.touched
-  is_touched_right = touch_right.touched
-
-  print(str(touch_left) + ':')
-  print(
-      'currently touched' if is_touched_left else 'currently not touched'
-  )
-  print(str(touch_right) + ':')
-  print(
-      'currently touched' if is_touched_right else 'currently not touched'
-  )
+  with ev3.Touch(ev3.PORT_1, protocol=ev3.WIFI) as touch_left:
+      touch_right = ev3.Touch(ev3.PORT_4, ev3_obj=touch_left)
+      print(str(touch_left) + ':', end=' ')
+      print('touched' if touch_left.touched else 'not touched')
+      print(str(touch_right) + ':', end=' ')
+      print('touched' if touch_right.touched else 'not touched')
     
 Some remarks:
 
   - Both touch sensors share the same EV3 device. Therefore only the
-    first instance is initialized with the keyword arguments
-    *protocol* and *host*.  The second instance is initialized with
-    keyword argument *ev3_obj* instead.
-  - Here, both sensors are handled independently, therefore the
-    communication data are not optimized. The request of the sensors'
-    state could have been done in a single direct command, but here it
-    needs two instead.
+    first instance is initialized with keyword argument
+    *protocol*. The second instance is initialized with keyword
+    argument *ev3_obj* instead.
+  - *touch_left* owns the connection, *touch_right* is its joint user.
+  - A single EV3 device controls up to four sensors and additionally
+    up to four motors. You will deal with more than two objects, when
+    you make use of EV3's full capacity.
+  - Both sensors are handled independently, therefore the
+    communication is not optimized. The request of both sensors' state
+    could have been done in a single direct command, but here it needs
+    two instead.
 
 
+.. _bump_mode:
+
++++++++++
 Bump-Mode
-~~~~~~~~~
++++++++++
 
 Touch sensors provide two modes, touch and bump (see sections
 :ref:`Touch mode of the Touch Sensor <touch-mode-dc>` and :ref:`Bump

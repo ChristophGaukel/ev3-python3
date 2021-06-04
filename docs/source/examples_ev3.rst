@@ -1,6 +1,6 @@
-+++
+###
 EV3
-+++
+###
 
 Class :py:class:`~ev3_dc.EV3` is the base class of ev3_dc. The
 constructor of EV3 establishes a connection between your computer and
@@ -20,44 +20,96 @@ is, what the next section deals with.
 
 .. _connect_with_device:
 
++++++++++++++++++++++++++++
 Connect with the EV3 device
----------------------------
++++++++++++++++++++++++++++
 
 We test all three connection protocols, which the EV3 device
 provides. If you don't own a WiFi dongle, you still can use *USB* and
 *Bluetooth*.
 
 USB
-~~~
+===
 
-Some steps for preparation:
+In the background python modules often use programs, written
+in C. This means: the module is a thin python layer, which calls a
+compiled library, often named backend. In case of USB devices, there
+exists a number of different backends, e.g. libusb0.1, libusb1.0,
+OpenUSB.
 
-  - Note the `MAC-address <https://en.wikipedia.org/wiki/MAC_address>`_ of your EV3 device,
-    you can read it from your EV3's display under Brick Info / ID.
-  - Take an USB cable and connect your EV3 device (the 2.0 Mini-B
-    port, titled PC) with your computer.
-  - On Windows systems, USB works if libusb is installed with a driver
-    for EV3 devices. Follow this `instruction
-    <https://www.smallcab.net/download/programme/xm-07/how-to-install-libusb-driver.pdf>`_
-    and replace *Xin-Mo Programmer* by *EV3* (when I did it, I clicked
-    the *Install Now* button in the Inf-Wizard and it was successfully
-    installing).
-  - On Linux sytems make shure, you have the permission to connect the EV3 device. In
-    my case, I had to add this udev-rule as file */etc/udev/rules.d/90-legoev3.rules*:
+For the installation process of the software, this says: You have to
+install some python code, which automatically has been done, when
+module ev3_dc was installed. But when ev3_dc tries to connect via USB, it
+needs to load a backend and it may happen, that it does not find any.
 
-    .. code:: none
+Let's look at the preparation steps.
 
-      ATTRS{idVendor}=="0694",ATTRS{idProduct}=="0005",MODE="0666",GROUP="christoph"
 
-Then modify the following program. Replace MAC-address
-``00:16:53:42:2B:99`` with the one of your EV3 device (it must be the
-colon-separated format) and run the program.
+Linux
+-----
+
+On my Ubuntu system, I first installed backend
+libusb1.0 with this terminal command:
+
+.. code-block:: none
+
+      sudo apt-get install libusb-1.0-0
+    
+Second I made shure to have the permission to connect the EV3
+device. I added this `udev rule
+<https://linuxconfig.org/tutorial-on-how-to-write-basic-udev-rules-in-linux>`_
+(as file */etc/udev/rules.d/90-legoev3.rules*):
+
+.. code-block:: none
+
+  ATTRS{idVendor}=="0694",ATTRS{idProduct}=="0005",MODE="0666",GROUP="christoph"
+
+This gives all members of group *christoph* (me allone) read and write
+permissions to product *0005* (EV3 devices) of vendor *0694* (LEGO
+group).
+
+Reboot the system or alternatively run this terminal command:
+
+.. code-block:: none
+
+  sudo udevadm control --reload-rules && udevadm trigger
+
+
+Windows 10
+----------
+
+Download libusb1.0 from the `libusb project <https://github.com/libusb/libusb/releases>`_
+(I additionally had to install program `7 zip <https://www.7-zip.org>`_).
+
+Copy file *libusb-1.0.dll* from *libusb-1.0.xy.7z\\MinGW64\\dll\\*
+into directory *C:\\Windows\\System32*.
+
+Follow this `instruction
+<https://www.smallcab.net/download/programme/xm-07/how-to-install-libusb-driver.pdf>`_
+and replace *Xin-Mo Programmer* by *EV3* (when I did it, I clicked the
+*Install Now* button in the Inf-Wizard and it was successfully
+installing).
+
+
+MacOS
+-----
+
+In case of MacOS, ev3_dc imports and uses module hidapi (whereas on
+Linux or Windows systems it imports module pyusb). As far as I know,
+the connection works out of the box (I don't own a Mac).
+
+    
+Test USB
+--------
+
+Take an USB cable and connect your EV3 device (the 2.0 Mini-B port,
+titled PC) with your computer. Then run this program.
 
 .. code:: python3
 
   import ev3_dc as ev3
 
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_robot:
+  with ev3.EV3(protocol=ev3.USB) as my_robot:
       print(my_robot)
 
 If everything is o.k., you will see an output like:
@@ -66,15 +118,17 @@ If everything is o.k., you will see an output like:
 
   USB connected EV3 00:16:53:42:2B:99 (Hugo)
 
-Protocol *USB* and MAC-address *00:16:53:42:2B:99* were given to the
-constructor of class *EV3* as keyword arguments. But this program also
-knows the name of my EV3 device. This needs a communication between
-the program an the EV3 device. Therefore the result undoubtly
-documents, the connection was successfully established.
+It needs a communication between the program and the EV3 device to
+know my EV3's name (*Hugo*) and its `MAC-address
+<https://en.wikipedia.org/wiki/MAC_address>`_
+(*00:16:53:42:2B:99*). The MAC-address also is known as serial number
+or pysical address and you can read it from your EV3's display under
+Brick Info / ID. Therefore the result documents, the connection was
+successfully established.
 
 
 Bluetooth
-~~~~~~~~~
+=========
 
 On Windows systems, Bluetooth works from Python 3.9 upwards. This
 says: your operating system can't be Windows 7 or earlier.  Maybe you
@@ -98,8 +152,8 @@ access rights):
 <https://nrca.zendesk.com/hc/en-us/articles/115002669503-Bluetooth-How-to-connect-the-EV3-Robot-to-your-PC-Computer-by-wireless-Bluetooth>`_
 (only steps 1 - 12) your computer and your EV3 device via Bluetooth
 and call the EV3 constructor with **protocol=ev3.BLUETOOTH**. This
-says: again replace MAC-address ``00:16:53:42:2B:99`` with the one
-of your EV3, then run this program:
+says: replace MAC-address ``00:16:53:42:2B:99`` with the one of your
+EV3, then run this program:
 
 .. code:: python3
 
@@ -119,7 +173,7 @@ connection works.
 
 
 WiFi
-~~~~
+====
 
 If you own a WiFi dongle, you can `connect
 <https://de.mathworks.com/help/supportpkg/legomindstormsev3io/ug/connect-to-an-ev3-brick-over-wifi.html>`_
@@ -150,9 +204,10 @@ fast connected and fast in data transfer. When you start your EV3
 device, *USB* is ready without any coupling. I prefer it for
 developping.
 
-  
+
+++++++++++++++++
 EV3's properties
-----------------
+++++++++++++++++
 
 The properties of class :py:class:`~ev3_dc.EV3` provide easy access to
 the state of the EV3 device. They e.g. describe the battery status,
@@ -164,7 +219,7 @@ device, you can e.g. easily change the sound volume or the EV3's name.
 
 
 name
-~~~~
+====
 
 Property :py:attr:`~ev3_dc.EV3.name` allows to read and change the
 name of the EV3 device. This is the one, you see in the first line of
@@ -199,7 +254,7 @@ Control your EV3's display, if the name really did change.
 
 
 sleep
-~~~~~
+=====
 
 Property :py:attr:`~ev3_dc.EV3.sleep` allows to read and change the
 timespan (in minutes), the EV3 waits in idle state before it
@@ -240,7 +295,7 @@ the above mentioned values (*never* is value 0).
 
 
 volume
-~~~~~~
+======
 
 Property :py:attr:`~ev3_dc.EV3.volume` allows to read and change the
 sound volume. You can also change the sound volume under menu item
@@ -280,7 +335,7 @@ values.
 
 
 battery
-~~~~~~~
+=======
 
 Property :py:attr:`~ev3_dc.EV3.battery` allows to get informations
 about the EV3's battery state. You get its voltage, its current and
@@ -331,7 +386,7 @@ for `ARM architecture
 
 
 sensors
-~~~~~~~
+=======
 
 Property :py:attr:`~ev3_dc.EV3.sensors` informs about the sensor types
 (motors also are sensors), which are connected to the EV3 brick.
@@ -377,7 +432,7 @@ ports by characters A to D.
 
 
 sensors_as_dict
-~~~~~~~~~~~~~~~
+===============
 
 Property :py:attr:`~ev3_dc.EV3.sensors_as_dict` provides the same information as property *sensors* but
 presents it in a form, which supports automatic handling.
@@ -420,7 +475,7 @@ Some remarks:
 
 
 system
-~~~~~~
+======
 
 Property :py:attr:`~ev3_dc.EV3.system` tells some informations about
 the EV3's operating system version, firmware version and hardware
@@ -458,7 +513,7 @@ version is V0.60.
 
 
 network
-~~~~~~~
+=======
 
 Property :py:attr:`~ev3_dc.EV3.network` allows to get informations
 about the WiFi connection of the EV3 device. Therefore it only works
@@ -514,7 +569,7 @@ This program's output was:
 
 
 memory
-~~~~~~
+======
 
 Property :py:attr:`~ev3_dc.EV3.memory` informs about EV3's memory
 space. 
@@ -541,7 +596,7 @@ this device.
 		
 
 protocol
-~~~~~~~~
+========
 
 Property :py:attr:`~ev3_dc.EV3.protocol` tells the protocol type of
 the EV3's connection. This sounds weird because we explicitly set it,
@@ -568,7 +623,7 @@ This program's output:
 
 
 host
-~~~~
+====
 
 Property :py:attr:`~ev3_dc.EV3.host` tells the `MAC-address
 <https://en.wikipedia.org/wiki/MAC_address>`_ of the EV3 device. As
@@ -592,7 +647,7 @@ This program's output:
 
 
 verbosity
-~~~~~~~~~
+=========
 
 Setting property :py:attr:`~ev3_dc.EV3.verbosity` to a value greater
 than zero allows to see the communication data between the program and
@@ -628,7 +683,7 @@ Some remarks:
 
 
 sync_mode
-~~~~~~~~~
+=========
 
 Property :py:attr:`~ev3_dc.EV3.sync_mode` has a very special meaning
 for direct commands. It influences the way, how requests are
@@ -701,8 +756,9 @@ command.
   
 .. _direct_commands_label:
 
++++++++++++++++
 Direct commands
----------------
++++++++++++++++
 
 Document `EV3 Firmware Developer Kit
 <https://www.lego.com/cdn/cs/set/assets/blt77bd61c3ac436ea3/LEGO_MINDSTORMS_EV3_Firmware_Developer_Kit.pdf>`_
@@ -711,7 +767,7 @@ you to understand the details.
 
 
 The art of doing nothing
-~~~~~~~~~~~~~~~~~~~~~~~~
+========================
 
 We send the idle operation of the EV3 device to test the communication speed.
 
@@ -803,14 +859,14 @@ of them are quite fast.
 
 
 Tell your EV3 what to do
-~~~~~~~~~~~~~~~~~~~~~~~~
+========================
 
 Direct commands allow to send instructions with arguments.
 
 .. _changing_led_colors_label:
 
 Changing LED colors
-...................
+-------------------
 
 There are some light effects on the EV3 brick. You can change the
 colors of the LEDs and this is done by operation *opUI_Write* with CMD
@@ -886,7 +942,7 @@ reply. This happens because *protocol* BLUETOOTH defaults to
 *sync_mode* STD.
 
 Setting EV3's brickname
-.......................
+-----------------------
 
 You can change the name of your EV3 brick by sending a direct command.
 
@@ -945,7 +1001,7 @@ in section *3.4 Parameter encoding*.
 
 
 Starting programs
-.................
+-----------------
 
 Direct commands allow to start programs, which normally is done by
 pressing buttons of the EV3 device. A program is a file, that exists
@@ -991,7 +1047,7 @@ will show, that the program has been started.
 
 
 Playing Sound Files
-...................
+-------------------
 
 Take an USB cable and connect your EV3 brick
 with your computer. Replace the
@@ -1032,7 +1088,7 @@ the direct command was replied.
 .. _playing_sound_files_repeatedly_label:
 
 Playing Sound Files repeatedly
-..............................
+------------------------------
 
 As above, take an USB cable, connect your EV3 brick with your computer
 and replace MAC-address by the one of your EV3 brick, then start
@@ -1078,7 +1134,7 @@ EV3 increments the message counter. The first command got 0x|2A:00|,
 which is the value 42, the second command got 0x|2B:00| (value 43).
 
 Playing Tones
-.............
+-------------
 
 We send a direct command, that plays a flourish in c, which consists
 of four tones:
@@ -1126,7 +1182,7 @@ prevents interruption. Without it, only the last tone could be
 heard. The duration is in milliseconds.
 
 Drawing and Timers
-..................
+------------------
 
 Contolling time is an important aspect in real time programs. We have
 seen how to wait until a tone ended and we waited in the python program
@@ -1303,7 +1359,7 @@ block the EV3 brick. All its direct commands need a short execution
 time and allow to send other direct commands in between.
 
 Simulating Button presses
-.........................
+-------------------------
 
 In this example, we shut down the EV3 brick by simulating button
 presses. We use two operations:
@@ -1353,7 +1409,7 @@ The program:
     
 
 Reading data from EV3's sensors
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+===============================
 Direct commands allow to read data from your EV3 device.
 The most important operation for reading data is:
 
@@ -1396,7 +1452,7 @@ and clears its counters.
     - (Data8) NO: Port number
 
 Introspection
-.............
+-------------
 
 There is an operation, that asks for the type and mode of a sensor at a specified port.
 
@@ -1547,19 +1603,18 @@ understand these numbers.
 .. _touch-mode-dc:
 
 Touch mode of the Touch Sensor
-..............................
+------------------------------
 
 We use operation *opInput_Device* to ask the touch sensor if it currently is touched.
 Connect your touch sensor with port 1, take an USB-cable and connect
-your computer with your EV3 brick, replace MAC-address with the one
-of your EV3 brick, then run this program:
+your computer with your EV3 brick, then run this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
   import struct
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   # touch sensor at port 1
@@ -1611,16 +1666,15 @@ number 1.0.
 .. _bump-mode-dc:
 
 Bump mode of the Touch Sensor
-..............................
+-----------------------------
 
 The bump mode of the touch sensor counts the number of touches since the
 last reset. The following program resets the counter of the touch sensor, waits
 for five seconds, then asks about the number of touches.
 
 If you own a WiFi dongle and both, you computer and your EV3 brick are
-connected to the WiFi, then you can start the following program after
-you replaced the MAC-address. If not, replace the protocol by USB or
-by BLUETOOTH.
+connected to the WiFi, then you can start the following program. If
+not, replace the protocol by USB or by BLUETOOTH.
 
 .. code:: python3
 
@@ -1628,7 +1682,7 @@ by BLUETOOTH.
   import struct
   from time import sleep
   
-  my_ev3 = ev3.EV3(protocol=ev3.WIFI, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.WIFI)
   my_ev3.verbosity = 1
   
   # clear port 1
@@ -1691,19 +1745,18 @@ If you compare the two direct commands, you will realize some differences:
   - The operations are different, which is not surprising.
 
 Measure distances
-.................
+-----------------
 
 Use operation *opInput_Device* to read data of the infrared sensor.
-Connect your EV3 infrared sensor with port 3, take an USB-cable and connect
-your computer with your EV3 brick, replace MAC-address with the one
-of your EV3 brick, then run this program:
+Connect your EV3 infrared sensor with port 3, take an USB-cable and
+connect your computer with your EV3 brick, then run this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
   import struct
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   # infrared sensor at port 3
@@ -1733,7 +1786,7 @@ The output:
 
 
 Seeker and Beacon
-.................
+-----------------
 
 Combining the EV3 infrared sensor and the EV3 beacon identifies
 the position of one to four beacons. A beacon send signals on one of four
@@ -1741,16 +1794,15 @@ channels and the infrared sensor measures its own position relative to
 the position the beacon.
 
 Connect your EV3 infrared sensor with port 3, take an USB-cable and
-connect your computer with your EV3 brick, replace MAC-address with
-the one of your EV3 brick, switch on the beacon, select a channel,
-place it in front of the infrared sensor, then run this program:
+connect your computer with your EV3 brick, select a channel, place it
+in front of the infrared sensor, then run this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
   import struct
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   ops_read = b''.join((
@@ -1822,19 +1874,18 @@ Some remarks:
   
 
 Reading the color
-.................
+-----------------
 
 We use operation *opInput_Device* to read data of the color sensor.
 Connect your color sensor with port 2, take an USB-cable and connect
-your computer with your EV3 brick, replace MAC-address with the one
-of your EV3 brick, then run this program:
+your computer with your EV3 brick, then run this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
   import struct
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   # color sensor at port 2
@@ -1882,11 +1933,9 @@ There are some more color sensor modes, maybe you like to test these:
   - Mode 4 (RGB-Raw)  - switches on red, green and blue light and measures the intensity of
     the reflected light.
 
-  
-
 
 Reading the current position of motors
-......................................
+--------------------------------------
 
 If two large motors are connected with ports A and D, you can
 start this program:
@@ -1942,12 +1991,12 @@ and an int.
 
 
 Moving motors
-~~~~~~~~~~~~~
+=============
 
 A number of operations is used for motor movements.
 
 Exact movements, blocking the EV3 brick
-.......................................
+---------------------------------------
 
 Exact and smooth movements of a mootor are our first theme. We start
 with using four operations:
@@ -2131,7 +2180,7 @@ this limits parallel execution.*
 
 
 Exact Movements, not blocking
-.............................
+-----------------------------
 
 We modify the program and replace *opOutput_Ready* by *opOutput_Start*.
 While the movement takes place, we ask frequently if it still is
@@ -2391,7 +2440,7 @@ care about its internals.
     
 
 Exact Movements as a Thread Task
-................................
+--------------------------------
 
 We modify this program once more and create a `thread task
 <https://thread-task.readthedocs.io/en/latest/>`_ object for both, the
@@ -2612,7 +2661,7 @@ Some remarks:
 
     
 Moving a motor to a Specified Position
-......................................
+--------------------------------------
 
 Connect your EV3 medium motor with port B, connect your computer and
 your EV3 brick with an USB cable, replace MAC-address
@@ -2691,7 +2740,7 @@ The output:
 
 
 Direct Commands are Machine Code Programs
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
 There are operations for calculations and much more. Direct commands
 are little machine code programs. Let's write a single direct command,

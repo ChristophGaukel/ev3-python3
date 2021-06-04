@@ -116,7 +116,7 @@ def pid(
         gain: float,
         *,
         time_int: float = None,
-        time_der: float = 0
+        time_der: float = None
 ) -> Callable:
     """
     Parametrize a new PID controller (standard form)
@@ -158,7 +158,6 @@ def pid(
     assert isinstance(time_der, Number) and time_der >= 0, \
         'time_der must be a positive number'
     error_pre = None
-    value_pre = None
     time_pre = None
     integral = None
 
@@ -175,10 +174,9 @@ def pid(
         """
         assert isinstance(value, Number), 'value must be a number'
 
-        nonlocal setpoint, gain, time_int, time_der, \
-            error_pre, value_pre, time_pre, integral
+        nonlocal error_pre, time_pre, integral
 
-        if time_int is None and time_der == 0:
+        if time_int is None and time_der is None:
             # P-controller (proportional term only)
             return gain * (setpoint - value)
 
@@ -194,7 +192,7 @@ def pid(
         time_pre = now
         error = (setpoint - value)
 
-        if time_der == 0:
+        if time_der is None:
             # PI-controller (no derivative term)
             integral += delta_time * error
             return gain * (error + integral / time_int)
@@ -212,3 +210,61 @@ def pid(
         return gain * (error + integral / time_int + der * time_der)
 
     return signal
+
+
+def corrector(
+        *,
+        actual: float = 0.0,
+        factor: float = 1.0,
+        target: float = 0.0
+) -> Callable:
+    """
+    Parametrize a new corrector
+    
+    the corrector replaces actual values by target ones. In detail it does:
+      - shift the measured value by actual (value -= actual)
+      - multiply by factor (value *= factor)
+      - shift back by target (value += target)
+
+    this means, value actual is replaces by value target,
+    other values, which are some distance apart from actual,
+    also are shiftet, but additianally their distance from actual
+    is corrected by factor.
+
+    Optional keyword only arguments
+
+      actual
+        initial shift, set it to the measurement value, you are most insterested in
+      factor
+        linear correction of distances from actual
+      target
+        final shift, set it to the value, which you will replace actual with
+
+    Returns
+      function correct(value: float) -> float
+    """
+    assert isinstance(actual, Number), \
+        'actual must be a number'
+    assert isinstance(factor, Number) and factor != 0, \
+        'factor must be a number and may not be zero'
+    assert isinstance(target, Number), \
+        'target must be a number'
+
+    summand = target / factor - actual
+
+    def correct(value: float) -> float:
+        """
+        calculates the target value from the actually measured one
+
+        Mandatory positional arguments
+          value
+            actually measured value (will be compared to setpoint)
+
+        Returns
+          corrected value
+        """
+        assert isinstance(value, Number), 'value must be a number'
+
+        return factor * (value + summand)
+
+    return correct

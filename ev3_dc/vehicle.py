@@ -2,6 +2,7 @@
 LEGO Mindstorms EV3 direct commands - vehicle
 '''
 
+import struct
 from typing import Tuple, Callable
 from math import pi, cos, sin, radians, copysign, sqrt
 from decimal import Decimal
@@ -52,7 +53,7 @@ from .functions import (
     LVX,
     port_motor_input
 )
-from .exceptions import MotorError
+from .exceptions import MotorError, PortInUse
 
 
 VehiclePosition = namedtuple('VehiclePosition', [
@@ -403,6 +404,38 @@ class TwoWheelVehicle(EV3):
                 port_str = 'PORT_D'
             raise MotorError('no motor connected at ' + port_str)
 
+        if self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port_left)]['used_by'] is not None:
+            if self._port_left == PORT_A:
+                port_str = 'PORT_A'
+            elif self._port_left == PORT_B:
+                port_str = 'PORT_B'
+            elif self._port_left == PORT_C:
+                port_str = 'PORT_C'
+            else:
+                port_str = 'PORT_D'
+            host_str = self._physical_ev3._host
+            raise PortInUse(f'{port_str} of {host_str} already in use')
+
+        self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port_left)]['used_by'] = self
+
+        if self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port_right)]['used_by'] is not None:
+            if self._port_right == PORT_A:
+                port_str = 'PORT_A'
+            elif self._port_right == PORT_B:
+                port_str = 'PORT_B'
+            elif self._port_right == PORT_C:
+                port_str = 'PORT_C'
+            else:
+                port_str = 'PORT_D'
+            host_str = self._physical_ev3._host
+            raise PortInUse(f'{port_str} of {host_str} already in use')
+
+        self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port_right)]['used_by'] = self
+
         self.send_direct_cmd(
             b''.join((
                 opOutput_Reset,
@@ -433,6 +466,26 @@ class TwoWheelVehicle(EV3):
             'TwoWheelVehicle',
             f'of {super().__str__()}'
         ))
+
+    def __del__(self):
+        """
+        handle specific logic for deletion
+        """
+        self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port_left)]['used_by'] = None
+        self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port_right)]['used_by'] = None
+        super().__del__()
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        """
+        handle specific logic when exit with block
+        """
+        self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port_left)]['used_by'] = None
+        self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port_right)]['used_by'] = None
+        super().__exit__(exc_type, exc_value, exc_traceback)
 
     @property
     def speed(self) -> int:

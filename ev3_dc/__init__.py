@@ -22,12 +22,14 @@ from .color import Color
 from .file import FileSystem
 from .motor import Motor
 from .sound import (
-    Jukebox,
     TRIAD,
     ALLE_MEINE_ENTCHEN,
     HAPPY_BIRTHDAY,
     EU_ANTEMN,
-    FRERE_JACQUES
+    FRERE_JACQUES,
+    Sound,
+    Jukebox,
+    Voice
 )
 from .touch import Touch
 from .infrared import Infrared

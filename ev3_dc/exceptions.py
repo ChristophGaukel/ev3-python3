@@ -1,6 +1,17 @@
 '''
 exceptions
 '''
+class FFMPEG(Exception):
+    '''
+    ffmpeg error
+    '''
+    pass
+class PortInUse(Exception):
+    '''
+    requested port already used
+    '''
+    pass
+
 class NoEV3(Exception):
     '''
     no EV3 brick found

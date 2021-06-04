@@ -45,7 +45,7 @@ from .constants import (
     ABS
 )
 from .functions import LCX, LVX, GVX, port_motor_input
-from .exceptions import MotorError
+from .exceptions import MotorError, PortInUse
 
 
 class Motor(EV3):
@@ -160,6 +160,22 @@ class Motor(EV3):
             else:
                 port_str = 'PORT_D'
             raise MotorError('no motor connected at ' + port_str)
+
+        if self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port)]['used_by'] is not None:
+            if self._port == PORT_A:
+                port_str = 'PORT_A'
+            elif self._port == PORT_B:
+                port_str = 'PORT_B'
+            elif self._port == PORT_C:
+                port_str = 'PORT_C'
+            else:
+                port_str = 'PORT_D'
+            host_str = self._physical_ev3._host
+            raise PortInUse(f'{port_str} of {host_str} already in use')
+            
+        self._physical_ev3._introspection["sensors"] \
+            [port_motor_input(self._port)]['used_by'] = self
             
         # reset counter
         self.send_direct_cmd(
@@ -208,6 +224,24 @@ class Motor(EV3):
                 f'at {port_str}',
                 f'of {super().__str__()}'
         ))
+
+    def __del__(self):
+        """
+        handle specific logic for deletion
+        """
+        self._physical_ev3._introspection["sensors"] \
+                                         [port_motor_input(self._port)] \
+                                         ['used_by'] = None
+        super().__del__()
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        """
+        handle specific logic when exit with block
+        """
+        self._physical_ev3._introspection["sensors"] \
+                                         [port_motor_input(self._port)] \
+                                         ['used_by'] = None
+        super().__exit__(exc_type, exc_value, exc_traceback)
 
     @property
     def port(self):

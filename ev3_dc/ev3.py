@@ -108,9 +108,9 @@ System = namedtuple('System', [
 
 class _PhysicalEV3:
     '''
-    holds data and methods, which are singletons per physical EV3 device
+    exists once per physical EV3 device
     '''
-    devices = set()  # all connected devices
+    _devices = set()  # all connected devices as class attribute
 
     def __init__(
             self,
@@ -125,7 +125,7 @@ class _PhysicalEV3:
             "host needs to be of type str"
         assert host is not None or protocol != BLUETOOTH, \
             "in case of protocol BLUETOOTH, host needs to be set"
-        assert host is None or host.upper() not in type(self).devices, \
+        assert host is None or host.upper() not in self.devices, \
             f"host {host} already connected, call with argument ev3_obj"
 
         self._msg_cnt = 41
@@ -148,29 +148,28 @@ class _PhysicalEV3:
             self.connect_wifi()
         else:
             self.connect_usb()
-            
-        type(self).devices.add(self._host)
-        
+
+        self._devices.add(self._host)
+
     @classmethod
-    def get_devices(cls):
+    @property
+    def devices(cls):
         '''
-        all connected devices in a dict,
-        key is the mac_address of the device
-        value is the number of classes, which share the connection       
+        all connected devices as a set of mac_addresses
         '''
-        return cls.devices
+        return cls._devices
 
     def __del__(self):
-        """
+        '''
         closes the connection to the LEGO EV3
-        """
+        '''
         if (
                 self._socket is not None and
                 isinstance(self._socket, socket.socket) and
-                self._host in type(self).devices
+                self._host in self._devices
         ):
             self._socket.close()
-            type(self).devices.remove(self._host)
+            self._devices.remove(self._host)
 
     def next_msg_cnt(self) -> int:
         '''
@@ -183,9 +182,9 @@ class _PhysicalEV3:
         return self._msg_cnt
 
     def put_to_reply_buffer(self, msg_cnt: bytes, reply: bytes) -> None:
-        """
+        '''
         put a reply to the stack
-        """
+        '''
         if msg_cnt in self._reply_buffer:
             raise ValueError(
                 'reply with msg_cnt ' +
@@ -196,9 +195,9 @@ class _PhysicalEV3:
 
 
     def connect_bluetooth(self) -> int:
-        """
+        '''
         Create a socket, that holds a bluetooth-connection to an EV3
-        """
+        '''
         self._socket = socket.socket(
             socket.AF_BLUETOOTH,
             socket.SOCK_STREAM,
@@ -211,9 +210,9 @@ class _PhysicalEV3:
 
 
     def connect_wifi(self) -> int:
-        """
+        '''
         Create a socket, that holds a WiFi-connection to an EV3
-        """
+        '''
 
         # listen on port 3015 for a UDP broadcast from the EV3
         started_at = datetime.now()
@@ -225,7 +224,7 @@ class _PhysicalEV3:
             UDPSock.settimeout(10)
             UDPSock.bind(('', 3015))
             try:
-                data, addr = UDPSock.recvfrom(67)
+                data, addr = UDPSock.recvfrom(1024)
             except socket.timeout:
                 raise NoEV3('No EV3 device found') from None
 
@@ -259,7 +258,7 @@ class _PhysicalEV3:
                     f'found EV3 device {serial_number}, but not {self._host}'
                 )
 
-        assert self._host not in type(self).devices, \
+        assert self._host not in self._devices, \
             f"host {self._host} already connected, call with argument ev3_obj"
 
         # Send an UDP message back to the EV3
@@ -288,9 +287,9 @@ class _PhysicalEV3:
 
 
     def connect_usb(self) -> int:
-        """
+        '''
         Create a device, that holds an USB connection to an EV3
-        """
+        '''
         if platform.system() == 'Darwin':
             # hidapi
             devices = hid.enumerate(_ID_VENDOR_LEGO, _ID_PRODUCT_EV3)
@@ -339,15 +338,15 @@ class _PhysicalEV3:
                 else:
                     self._device = dev
                     self._host = mac_addr
-    
+
             if self._device is None:
                 if mac_addr is None:
                     raise NoEV3('No EV3 device found')
                 raise NoEV3(
                     f'found EV3 devices: {hosts} but not {self._host}'
                 )
-    
-            assert self._host not in type(self).devices, \
+
+            assert self._host not in self._devices, \
                 f"host {self._host} already connected, call with argument ev3_obj"
     
             # handle interfaces
@@ -358,7 +357,7 @@ class _PhysicalEV3:
                 except NotImplementedError:
                     pass
             self._device.set_configuration()
-    
+
             # initial read
             try:
                 self._device.read(_EP_IN, 1024, 100)
@@ -367,9 +366,9 @@ class _PhysicalEV3:
 
 
     def introspection(self, verbosity: int) -> None:
-        """
+        '''
         reads informations about itself
-        """
+        '''
         ports = (
             PORT_1,
             PORT_2,
@@ -435,14 +434,20 @@ class _PhysicalEV3:
         self._introspection = {}
         self._introspection["sensors"] = {}
         for i in range(8):
-            sensor_type, sensor_mode = struct.unpack(
-                '<BB',
-                reply[2*i:2*i+2]
-            )
+            sensor_type = struct.unpack(
+                '<B',
+                reply[2*i:2*i+1]
+            )[0]
             if sensor_type == 126:
-                self._introspection["sensors"][ports[i]] = None
+                self._introspection["sensors"][ports[i]] = {
+                        'type': None,
+                        'used_by': None
+                }
             else:
-                self._introspection["sensors"][ports[i]] = sensor_type
+                self._introspection["sensors"][ports[i]] = {
+                        'type': sensor_type,
+                        'used_by': None
+                }
         (
             self._introspection["mem_total"],
             self._introspection["mem_free"],
@@ -506,9 +511,9 @@ class _PhysicalEV3:
             global_mem: int = 0,
             sync_mode: str = None
     ) -> bytes:
-        """
+        '''
         Send a direct command to the LEGO EV3
-        """
+        '''
 
         if sync_mode is None:
             if self._protocol == USB:
@@ -573,9 +578,9 @@ class _PhysicalEV3:
             verbosity: int = None,
             _locked: bool = False
     ) -> bytes:
-        """
+        '''
         Ask the LEGO EV3 for a reply and wait until it is received
-        """
+        '''
 
         if not _locked:
             self._lock.acquire()
@@ -647,9 +652,9 @@ class _PhysicalEV3:
             verbosity: int,
             reply: bool = True
     ) -> bytes:
-        """
+        '''
         Send a system command to the LEGO EV3
-        """
+        '''
 
         self._lock.acquire()
 
@@ -697,9 +702,9 @@ class _PhysicalEV3:
             verbosity: int,
             _locked=False
     ) -> bytes:
-        """
+        '''
         Ask the LEGO EV3 for a system command reply and wait until received
-        """
+        '''
 
         if not _locked:
             self._lock.acquire()
@@ -773,9 +778,9 @@ class _PhysicalEV3:
 
 
 class EV3:
-    """
+    '''
     communicates with a LEGO EV3 using direct or system commands
-    """
+    '''
 
     def __init__(
             self,
@@ -786,7 +791,7 @@ class EV3:
             sync_mode: str = None,
             verbosity=0
     ):
-        """
+        '''
         Establish a connection to a LEGO EV3 device
 
         Keyword arguments (either protocol and host or ev3_obj)
@@ -808,12 +813,14 @@ class EV3:
             which may be empty.
           verbosity
             level (0, 1, 2) of verbosity (prints on stdout).
-        """
+        '''
         assert ev3_obj or protocol, \
             'Either protocol or ev3_obj needs to be given'
         if ev3_obj:
             assert isinstance(ev3_obj, EV3), \
                 'ev3_obj needs to be instance of EV3'
+            assert ev3_obj._physical_ev3 is not None, \
+                'ev3_obj needs to be active'
             self._conn_owner = False
             self._physical_ev3 = ev3_obj._physical_ev3
         else:
@@ -841,27 +848,29 @@ class EV3:
             self._sync_mode = STD
 
     def __enter__(self):
-        """
+        '''
         allows to code 'with EV3 as my_ev3:'
-        """
+        '''
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        """
+        '''
         allows a clean exit from with block
-        """
+        '''
         if self._conn_owner:
             self._physical_ev3.__del__()
-            
+            self._physical_ev3 = None
+
     def __del__(self):
-        """
+        '''
         handles deletions
-        """
+        '''
         if self._conn_owner and self._physical_ev3 is not None:
             self._physical_ev3.__del__()
+            self._physical_ev3 = None
 
     def __str__(self):
-        """representation of the object in a str context"""
+        '''representation of the object in a str context'''
         return ' '.join((
             f'{self.protocol}',
             f'connected EV3 {self.host}',
@@ -870,9 +879,9 @@ class EV3:
 
     @property
     def battery(self) -> Battery:
-        """
+        '''
         battery voltage [V], current [A] and percentage (as named tuple)
-        """
+        '''
         reply = self._physical_ev3.send_direct_cmd(
             b''.join((
                 opUI_Read,
@@ -895,16 +904,16 @@ class EV3:
 
     @property
     def host(self) -> str:
-        """
+        '''
         mac address of EV3 device
-        """
+        '''
         return self._physical_ev3._host
 
     @property
     def memory(self) -> Memory:
-        """
+        '''
         total and free memory [kB] (as named tuple)
-        """
+        '''
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return Memory(
@@ -914,9 +923,9 @@ class EV3:
 
     @property
     def name(self) -> str:
-        """
+        '''
         name of EV3 device
-        """
+        '''
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return self._physical_ev3._introspection["name"]
@@ -941,12 +950,12 @@ class EV3:
 
     @property
     def network(self) -> str:
-        """
+        '''
         name, ip_adr and mac_adr of the EV3 device (as named tuple)
 
         available only for WiFi connected devices,
         mac_adr is the address of the WiFi dongle
-        """
+        '''
         assert self._physical_ev3._protocol == WIFI, \
           'available only for WiFi connected devices'
         if self._physical_ev3._introspection is None:
@@ -959,53 +968,56 @@ class EV3:
 
     @property
     def protocol(self) -> str:
-        """
+        '''
         connection type
-        """
+        '''
         return self._physical_ev3._protocol
 
     @property
     def sensors(self) -> Sensors:
-        """
+        '''
         all connected sensors and motors at all ports (as named tuple Sensors)
 
         You can address a single one by e.g.:
         ev3_dc.EV3.sensors.Port_3 or
         ev3_dc.EV3.sensors.Port_C
-        """
+        '''
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return Sensors(
-            self._physical_ev3._introspection["sensors"][PORT_1],
-            self._physical_ev3._introspection["sensors"][PORT_2],
-            self._physical_ev3._introspection["sensors"][PORT_3],
-            self._physical_ev3._introspection["sensors"][PORT_4],
-            self._physical_ev3._introspection["sensors"][PORT_A_SENSOR],
-            self._physical_ev3._introspection["sensors"][PORT_B_SENSOR],
-            self._physical_ev3._introspection["sensors"][PORT_C_SENSOR],
-            self._physical_ev3._introspection["sensors"][PORT_D_SENSOR]
+            self._physical_ev3._introspection["sensors"][PORT_1]["type"],
+            self._physical_ev3._introspection["sensors"][PORT_2]["type"],
+            self._physical_ev3._introspection["sensors"][PORT_3]["type"],
+            self._physical_ev3._introspection["sensors"][PORT_4]["type"],
+            self._physical_ev3._introspection["sensors"][PORT_A_SENSOR]["type"],
+            self._physical_ev3._introspection["sensors"][PORT_B_SENSOR]["type"],
+            self._physical_ev3._introspection["sensors"][PORT_C_SENSOR]["type"],
+            self._physical_ev3._introspection["sensors"][PORT_D_SENSOR]["type"]
         )
 
     @property
     def sensors_as_dict(self) -> dict:
-        """
+        '''
         all connected sensors and motors at all ports (as dict)
 
         You can address a single one by e.g.:
         ev3_dc.EV3.sensors_as_dict[ev3_dc.PORT_1] or
         ev3_dc.EV3.sensors_as_dict[ev3_dc.PORT_A_SENSOR]
-        """
+        '''
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
-        return self._physical_ev3._introspection["sensors"]
+        return {
+            key: sensor["type"]
+            for key, sensor in self._physical_ev3._introspection["sensors"].items()
+        }
 
     @property
     def sleep(self) -> int:
-        """
+        '''
         idle minutes until EV3 shuts down, values from 0 to 120
 
         value 0 says: never shut down
-        """
+        '''
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return self._physical_ev3._introspection["sleep"]
@@ -1030,7 +1042,7 @@ class EV3:
 
     @property
     def sync_mode(self) -> str:
-        """
+        '''
         sync mode (standard, asynchronous, synchronous)
 
         STD
@@ -1053,7 +1065,7 @@ class EV3:
 
           STD - direct commands with no reply are handled like ASYNC,
           direct commands with reply are handled like SYNC.
-        """
+        '''
 
         return self._sync_mode
 
@@ -1067,7 +1079,7 @@ class EV3:
 
     @property
     def system(self) -> str:
-        """
+        '''
         system versions and build numbers (as named tuple System)
 
           os_version
@@ -1080,7 +1092,7 @@ class EV3:
             firmware build number
           hw_version
             hardware version
-        """
+        '''
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return System(
@@ -1093,9 +1105,9 @@ class EV3:
 
     @property
     def verbosity(self) -> int:
-        """
+        '''
         level of verbosity (prints on stdout), values 0, 1 or 2
-        """
+        '''
         return self._verbosity
 
     @verbosity.setter
@@ -1108,9 +1120,9 @@ class EV3:
 
     @property
     def volume(self) -> int:
-        """
+        '''
         sound volume [%], values from 0 to 100
-        """
+        '''
         if self._physical_ev3._introspection is None:
             self._physical_ev3.introspection(self._verbosity)
         return self._physical_ev3._introspection["volume"]
@@ -1142,7 +1154,7 @@ class EV3:
             sync_mode: str = None,
             verbosity: int = None
     ) -> bytes:
-        """
+        '''
         Send a direct command to the LEGO EV3
 
         Mandatory positional arguments
@@ -1177,7 +1189,7 @@ class EV3:
             message counter
           SYNC (sync_mode)
             reply of the LEGO EV3
-        """
+        '''
         assert isinstance(ops, bytes), \
             "ops needs to be of type bytes"
         assert len(ops) > 0, \
@@ -1221,7 +1233,7 @@ class EV3:
             *,
             verbosity: int = None
     ) -> bytes:
-        """
+        '''
         Ask the LEGO EV3 for a reply and wait until it is received
 
         Mandatory positional arguments
@@ -1237,7 +1249,7 @@ class EV3:
         Returns
 
           reply to the direct command (without len, msg_cnt and return status)
-        """
+        '''
         assert isinstance(msg_cnt, bytes), \
             "msg_cnt needs to be of type bytes"
         assert len(msg_cnt) == 2, \
@@ -1261,7 +1273,7 @@ class EV3:
             reply: bool = True,
             verbosity: int = None
     ) -> bytes:
-        """
+        '''
         Send a system command to the LEGO EV3
 
         Mandatory positional arguments
@@ -1285,7 +1297,7 @@ class EV3:
         Returns
 
           reply (in case of SYSTEM_COMMAND_NO_REPLY: msg_cnt)
-        """
+        '''
         assert isinstance(cmd, bytes), \
             "cmd needs to be of type bytes"
         assert isinstance(reply, bool), \
@@ -1309,7 +1321,7 @@ class EV3:
             *,
             verbosity: int = None
     ) -> bytes:
-        """
+        '''
         Ask the LEGO EV3 for a system command reply and wait until received
 
         Mandatory positional arguments
@@ -1325,7 +1337,7 @@ class EV3:
         Returns
 
           reply to the system command
-        """
+        '''
         assert isinstance(msg_cnt, bytes), \
             "msg_cnt needs to be of type bytes"
         assert len(msg_cnt) == 2, \
