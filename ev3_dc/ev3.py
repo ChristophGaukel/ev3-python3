@@ -125,7 +125,7 @@ class _PhysicalEV3:
             "host needs to be of type str"
         assert host is not None or protocol != BLUETOOTH, \
             "in case of protocol BLUETOOTH, host needs to be set"
-        assert host is None or host.upper() not in self.devices, \
+        assert host is None or host.upper() not in self._devices, \
             f"host {host} already connected, call with argument ev3_obj"
 
         self._msg_cnt = 41

@@ -1,3 +1,4 @@
 thread_task
+gTTS
 pyusb
 hidapi
