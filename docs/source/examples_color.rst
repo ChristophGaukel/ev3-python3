@@ -126,6 +126,111 @@ My program's output was:
   the color is green
 
 
+Red green blue Color Intensities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Class :py:class:`~ev3_dc.Color` has an attribute
+:py:attr:`~ev3_dc.Color.rgb_raw`, which is a tuple of three int type values and tells the
+color of the surface in front of the sensor. This ist done when the
+sensor shines with all three led colors on.
+
+Take an USB cable and connect your EV3 device with your
+computer, connect a color sensor (it must be of type
+ev3.EV3_COLOR) with PORT 1, then start this
+program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  my_color = ev3.Color(
+          ev3.PORT_1,
+          protocol=ev3.USB
+  )
+  print(my_color.rgb_raw)
+        
+Some remarks:
+
+  - You already know, how to change the program for using protocols
+    Bluetooth or WiFi.
+  - Run the program multiple times with different surface colors in
+    front of the sensor. Also vary the distance from the surface.
+  - Be aware, that every reference of property *rgb_raw* starts a new communication
+    between the program and the EV3 device.
+  - Switch on verbosity by setting attribute
+    :py:attr:`~ev3_dc.Color.verbosity` to value 1 and you will see the
+    communication data.
+  - The light emission is permanent. Therefore the sensor permanently
+    switches on all its LED light colors.
+
+My program's output with a white surface in front of the sensor:
+
+.. code-block:: none
+
+  (253, 292, 183)
+        
+Some remarks:
+
+  - Maybe you did not expect to get values higher than 255. Keep in
+    mind, that sensor ev3.EV3_COLOR is normed to values from 0
+    to 1024.
+  - The intensity of the three raw colors is not balanced. A white
+    surface should be seen with all three colors at the same
+    level. Here green is dominant and blue is underrepresented. Both,
+    different LED light intensities and unbalanced color sensitiveness
+    of the sensor combine to cause this effect. This is what
+    photography or image processing names `color balance
+    <https://en.wikipedia.org/wiki/Color_balance>`_.
+  - The geometry also plays its role in the measured intensities. the
+    blue light source is closest to the sensor, the green one is most
+    distant. The smaller the distance between sensor and a white
+    surface becomes, the more balanced are the three colors.
+
+
+Balanced red green blue Color Intensities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Class :py:class:`~ev3_dc.Color` has an attribute
+:py:attr:`~ev3_dc.Color.rgb`, which is very similar to attribute
+:py:attr:`~ev3_dc.Color.rgb_raw`, but is white balanced.
+
+Take an USB cable and connect your EV3 device with your
+computer, connect a color sensor (it must be of type
+ev3.EV3_COLOR) with PORT 1, then start this
+program:
+
+.. code:: python3
+
+  import ev3_dc as ev3
+  
+  my_color = ev3.Color(
+          ev3.PORT_1,
+          protocol=ev3.USB
+  )
+  my_color.rgb_white_balance = (253, 292, 183)
+  print(my_color.rgb)
+            
+Some remarks:
+
+  - This program uses the raw values, measured on a white surface to
+    do the white balance.
+  - Run the program multiple times with different surface colors in
+    front of the sensor. Also vary the distance from the surface.
+
+My program's output with a green surface in front of the sensor:
+
+.. code-block:: none
+
+  (43, 114, 54)
+            
+Some remarks:
+
+  - Attribute :py:attr:`~ev3_dc.Color.rgb` is normed to values between 0 and 255. This is what you know as rgb colors.
+  - Use a color picker, like `this one
+    <https://www.w3schools.com/colors/colors_rgb.asp>`_ to control
+    your results.
+
+
 Ambient light intensity
 ~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -644,7 +644,7 @@ class TwoWheelVehicle(EV3):
         callable, which frequently tells current vehicle position,
         its single argument must be of type VehiclePosition
         '''
-        return self._tracking_callback
+        return self._tracking._callback
     
     @tracking_callback.setter
     def tracking_callback(self, value):
@@ -652,7 +652,7 @@ class TwoWheelVehicle(EV3):
             value is None or
             isinstance(value, Callable)
         ), "tracking_callback must be a callable"
-        self._tracking_callback = value
+        self._tracking._callback = value
 
     def _ops_busy(self, global_offset=0) -> bytes:
         '''reads busy state of motors (returns operations)
@@ -949,14 +949,14 @@ class TwoWheelVehicle(EV3):
                 LCX(-1),
                 LVX(40),  # abs(done_inner)
 
-                # if abs(done_inner) < step1: return
+                # if abs(done_inner) < step1: return (still in ramp up)
 
                 opJr_Lt32,  # b'\x66'
                 LVX(40),  # abs(done_inner)
                 LVX(24),  # step1
                 LCX(235),  # OFFSET
 
-                # if abs(done_inner) > (step1 + step2): return
+                # if abs(done_inner) > (step1 + step2): return (already in ramp down)
 
                 opAdd32,  # b'\x12'
                 LVX(24),  # step1
@@ -1083,22 +1083,22 @@ class TwoWheelVehicle(EV3):
 
                 # skip accelerate
 
-                opJr_Eq32,  # b'\x6E'
+                opJr_Eq32,  # b'\x6E'  already maximum speed
                 GVX(8),  # speed
                 LCX(100),
                 LCX(54),  # OFFSET
 
-                opJr_Eq32,  # b'\x6E'
+                opJr_Eq32,  # b'\x6E'  already maximum speed
                 GVX(8),  # speed
                 LCX(-100),
                 LCX(48),  # OFFSET
 
-                opJr_GteqF,  # b'\x7B'
+                opJr_GteqF,  # b'\x7B'  already compensating
                 LVX(44),  # ratio_last
                 LVX(52),  # ratio_all
                 LCX(41),  # OFFSET
 
-                opJr_GteqF,  # b'\x7B'
+                opJr_GteqF,  # b'\x7B'  ratio over target
                 LVX(40),  # ratio_done
                 LVX(52),  # ratio_all
                 LCX(34),  # OFFSET

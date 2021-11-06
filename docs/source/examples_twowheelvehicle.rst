@@ -270,16 +270,120 @@ Some remarks:
     the parcours and reading the sensor happen parallel in different threads.
   - the *Periodic* calls function *keep_care* ten times per second, which is often
     enough to stop the vehicle before it collides with a barrier.
+
+
+Plotting the Energy Consumption
+===============================
+
+The option of doing multiple things parallel opens a lot of
+perspectives. As an example we track the energy consumption of a
+vehicle by repeatedly reading its battery state. We will realize, that
+the battery state is not precisely the current one, instead it shows
+medium values over some time, therefore the result will be not more
+than reasonable. This example uses module *matplotlib*, which you need
+to have installed.
+
+Connect your EV3 brick and your computer via WiFi, connect the left
+wheel motor (medium or large) with PORT A and the right wheel motor
+with PORT D, replace the values of *radius_wheel* and *tread* with the
+values from your calibration, then start this program:
+
+.. code:: python3
+
+  import matplotlib.pyplot as plt
+  import datetime
+  from thread_task import Periodic, Task, Sleep
+  import ev3_dc as ev3
+  
+  times = []
+  powers = []
+  
+  with ev3.TwoWheelVehicle(
+      0.01518,  # radius_wheel
+      0.11495,  # tread
+      protocol=ev3.WIFI,
+      speed=40
+  ) as vehicle:
+      
+      def track_power():
+          '''
+          determine current power consumption
+          '''
+          battery = vehicle.battery
+          times.append(datetime.datetime.now())
+          powers.append(battery.voltage * battery.current)
+          
+      t_track = Periodic(0.1, track_power)
+      
+      t_parcours = (
+          Sleep(5) +
+          vehicle.drive_straight(0.5) +
+          Sleep(5) +
+          vehicle.drive_turn(120, 0.0) +
+          Sleep(5) +
+          vehicle.drive_straight(0.5) +
+          Sleep(5) +
+          vehicle.drive_turn(120, 0.0) +
+          Sleep(5) +
+          vehicle.drive_straight(0.5) +
+          Sleep(5) +
+          vehicle.drive_turn(120, 0.0) +
+          Sleep(10)
+      )
+      
+      (
+          Task(t_track.start) +
+          t_parcours +
+          Task(t_track.stop)
+      ).start(thread=False)
+  
+      # plot powers over times
+      plt.plot(times, powers)
+      plt.gcf().autofmt_xdate()
+      plt.show()
+
+Some remarks:
+
+  - The parcours includes timespans with no action. We want to
+    see how the energy consumption differs between action and rest.
+  - Function *track_power* protocols a single datetime and power [W]
+    in the corresponding lists *times* and *powers*.
+  - After started, *t_track* would run forever and protocol the
+    current power consumption 10 times per second. Therefore *t_track*
+    is stopped, when the vehicle finished the parcours.
+  - *Task(t_track.start)* starts *t_track* in its own thread. This
+    says: *t_track* and *t_parcours* run parallel.
+  - This pattern is typical for executing two thread tasks parallel,
+    when one of the thread tasks sets the timing by its duration.
+
+My program plotted this figure:
+
+.. image:: ./images/power_consumption.png
+
+Some remarks:
+
+  - We expect the highest energy consumtion at the beginning of the
+    movements, when the vehicle accelerates and we expect an immediate
+    fallback to its original value, when the movements end.
+  - Instead we see a flattened increase and decrease with a flattening
+    over a few seconds. We see the six movements as peaks, but the
+    form of the peaks does not show the real energy consumption.
+  - Our conclusion: the battery state shows a kind of medium values
+    over a timespan of a few seconds.
+  
 	  
-++++++++
-Tracking
-++++++++
++++++++++++++++++++++++++++++++++++++++++++++++
+Tracking the vehicle's Position and Orientation
++++++++++++++++++++++++++++++++++++++++++++++++
 
 Class *TwoWheelVehicle* tracks the vehicle's position and orientation.
 Property :py:attr:`~ev3_dc.TwoWheelVehicle.position` tells the current
 values. Alternatively, you can use
 :py:attr:`~ev3_dc.TwoWheelVehicle.tracking_callback` to handle the
 information about the current position and orientation.
+
+Print Current Position
+======================
 
 Connect your EV3 brick and your computer via WiFi, replace the
 MAC-address by the one of your EV3 brick, connect the left wheel motor
@@ -342,6 +446,97 @@ Some remarks:
     set a higher :py:attr:`~ev3_dc.TwoWheelVehicle.speed` and higher
     values for :py:attr:`~ev3_dc.TwoWheelVehicle.ramp_up` and
     :py:attr:`~ev3_dc.TwoWheelVehicle.ramp_down`.
+
+	
+Visualize the Movement
+======================
+
+We use `matplotlib <https://matplotlib.org/>`_ to visualize the
+vehicle's movement. Most of the next program are details of this
+tool. Some of you already know motplotlib and will find some details
+to modify. For some of you this will be the first contact with the
+tool, then take is as it is. Some of you will know the standard python
+turtle module and we already mentioned it. This program comes even
+closer to this module and will give some of you a familiar warm
+feeling.
+
+You need to have *matplotlib* installed. If so, connect your EV3 brick
+and your computer via WiFi, connect the left wheel motor (medium or
+large) with PORT A and the right wheel motor with PORT D, replace the
+values of *radius_wheel* and *tread* with the values from your
+calibration, then start this program:
+
+.. code:: python3
+
+  import matplotlib.pyplot as plt
+  import ev3_dc as ev3
+  
+  plt.ion()
+  fig, ax = plt.subplots()
+  ax.figure.set_size_inches(5, 5)
+  ax.grid(True)
+  
+  ax.set_xlim([-1.1, 1.1])
+  ax.set_xticks([-1, -0.5, 0.5, 1])
+  ax.spines['left'].set_position('zero')
+  ax.spines['right'].set_color('none')
+  
+  ax.set_ylim([-1.1, 1.1])
+  ax.set_yticks([-1, -0.5, 0.5, 1])
+  ax.spines['bottom'].set_position('zero')
+  ax.spines['top'].set_color('none')
+  
+  x_values = [0.0,]
+  y_values = [0.0,]
+  pos = ax.plot(0.0, 0.0, 'ro')[0]
+  line = ax.plot(x_values, y_values, 'r-')[0]
+  fig.canvas.draw()
+  
+  def plot_curr_pos(curr_pos: ev3.VehiclePosition):
+      '''
+      updates pos in plot
+      '''
+      x_values.append(curr_pos.x)
+      y_values.append(curr_pos.y)
+      line.set_xdata(x_values)
+      line.set_ydata(y_values)
+      pos.set_xdata(curr_pos.x)
+      pos.set_ydata(curr_pos.y)
+      fig.canvas.flush_events()
+  
+  with ev3.TwoWheelVehicle(
+      0.01518,  # radius_wheel
+      0.11495,  # tread
+      protocol=ev3.WIFI,
+      speed=50,
+      tracking_callback=plot_curr_pos
+  ) as vehicle:
+      parcours = (
+          vehicle.drive_straight(0.5) +
+          vehicle.drive_turn(270, 0.5) +
+          vehicle.drive_straight(1.0) +
+          vehicle.drive_turn(-270, 0.5) +
+          vehicle.drive_straight(0.5)
+      )
+      parcours.start(thread=False)
+
+Some remarks:
+
+  - The program consists of three parts. The first does the setup of
+    the plot, the second defines a function *plot_curr_pos*, which
+    updates the plot and the last part lets the vehicle drive a
+    parcours.
+  - Setting keyword argument *tracking_callback=plot_curr_pos* is an
+    important detail. This tells the
+    :py:class:`~ev3_dc.TwoWheelVehicle` object to call function
+    *plot_curr_pos* whenever it reads the current position of the
+    vehicle's motors.
+  - The parcours lets the vehicle drive a lying eight and start from
+    the figure's center. It starts driving alongside the x-axis. After
+    half a meter it turns 270 ° to the left side until it reaches the
+    y-axis, etc.
+  - Play around and modify the parcours. Let the vehicle drive your
+    geometric favorites.
 
 +++++++++++++++++++
 Regulated Movements
