@@ -167,24 +167,25 @@ My program's output with a white surface in front of the sensor:
 
 .. code-block:: none
 
-  (253, 292, 183)
+  RawRGBColor(red=253, green=292, blue=183)
         
 Some remarks:
 
   - Maybe you did not expect to get values higher than 255. Keep in
     mind, that sensor ev3.EV3_COLOR is normed to values from 0
     to 1024.
-  - The intensity of the three raw colors is not balanced. A white
-    surface should be seen with all three colors at the same
-    level. Here green is dominant and blue is underrepresented. Both,
-    different LED light intensities and unbalanced color sensitiveness
-    of the sensor combine to cause this effect. This is what
-    photography or image processing names `color balance
-    <https://en.wikipedia.org/wiki/Color_balance>`_.
-  - The geometry also plays its role in the measured intensities. the
-    blue light source is closest to the sensor, the green one is most
-    distant. The smaller the distance between sensor and a white
-    surface becomes, the more balanced are the three colors.
+  - The measurement is done with reflected light and consequently
+    depends on the color spectrum of the light source. The blue part
+    of the light source's frequencies is under-represented, the green
+    part is over-represented and this is what you find in the result
+    above.
+  - The result from the white surface can be used for a `color balance
+    <https://en.wikipedia.org/wiki/Color_balance>`_, which is well
+    known from photography or image processing.
+  - Geometry also plays its role in the measured intensities. The blue
+    light source is closest to the sensor, the green one is most
+    distant. As a consequence, smaller distances between sensor and
+    surface result in more balanced results.
 
 
 Balanced red green blue Color Intensities
@@ -203,10 +204,7 @@ program:
 
   import ev3_dc as ev3
   
-  my_color = ev3.Color(
-          ev3.PORT_1,
-          protocol=ev3.USB
-  )
+  my_color = ev3.Color(ev3.PORT_1, protocol=ev3.USB)
   my_color.rgb_white_balance = (253, 292, 183)
   print(my_color.rgb)
             
@@ -214,6 +212,8 @@ Some remarks:
 
   - This program uses the raw values, measured on a white surface to
     do the white balance.
+  - Replace the values for the white balance by the result of your own
+    measurement.
   - Run the program multiple times with different surface colors in
     front of the sensor. Also vary the distance from the surface.
 
@@ -221,7 +221,7 @@ My program's output with a green surface in front of the sensor:
 
 .. code-block:: none
 
-  (43, 114, 54)
+  RGBColor(red=43, green=114, blue=54)
             
 Some remarks:
 

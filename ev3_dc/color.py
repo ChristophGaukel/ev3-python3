@@ -3,8 +3,11 @@ LEGO Mindstorms EV3 direct commands - color
 """
 
 import struct
+from typing import Tuple
+from collections import namedtuple
 from collections.abc import Iterable
 from numbers import Number
+
 from .ev3 import EV3
 from .constants import (
     PORT_1,
@@ -19,6 +22,18 @@ from .constants import (
 )
 from .functions import LCX, GVX
 from .exceptions import SensorError, PortInUse
+
+RawRGBColor = namedtuple('RawRGBColor', [
+        'red',
+        'green',
+        'blue'
+])
+
+RGBColor = namedtuple('RGBColor', [
+        'red',
+        'green',
+        'blue'
+])
 
 
 class Color(EV3):
@@ -183,13 +198,13 @@ class Color(EV3):
         return struct.unpack('<i', reply)[0]
 
     @property
-    def rgb_raw(self) -> tuple[int, int, int]:
+    def rgb_raw(self) -> RawRGBColor:
         """
         surface color in front of the sensor as red, green, blue intensities
         
         intensities are reflected light intensities [0 - 1024]
         
-        uses modes EV3-Color-Color or NXT-Color-Color
+        uses mode EV3-Color-Color, does not work with NXT-Color-Color
         """
         if self.sensors_as_dict[self._port] != EV3_COLOR:
             raise SensorError('rgb works only with EV3 color sensor')
@@ -206,43 +221,49 @@ class Color(EV3):
                 GVX(8)  # VALUE1 blue (output)
         ))
         reply = self.send_direct_cmd(ops, global_mem=12)
-        return struct.unpack('<3i', reply)
+        return RawRGBColor(
+            *struct.unpack('<3i', reply)
+        )
 
     @property
-    def rgb(self) -> tuple[int, int, int]:
+    def rgb(self) -> RGBColor:
         """
         surface color in front of the sensor as red, green, blue intensities
         
         intensities are white balanced reflected light intensities [0 - 255]
         
-        uses modes EV3-Color-Color or NXT-Color-Color
+        uses mode EV3-Color-Color, does not work with NXT-Color-Color
         """
         if self.sensors_as_dict[self._port] != EV3_COLOR:
             raise SensorError('rgb works only with EV3 color sensor')
         assert self._rgb_white_balance_raw is not None, "no white_balance done"
         rgb_raw = self.rgb_raw
-        result = tuple(
-            round(raw * 255 / white)
-            for raw, white in zip(rgb_raw, self._rgb_white_balance_raw)
+        result = RGBColor(
+            *(
+                round(raw * 255 / white)
+                for raw, white in zip(rgb_raw, self._rgb_white_balance_raw)
+            )
         )
             
         if max(result) <= 255:
             return result
             
         fact = 255 / max(result)
-        return tuple(
-            round(fact * res)
-            for res in result
+        return RGBColor(
+            *(
+                round(fact * res)
+                for res in result
+            )
         )
 
     @property
-    def rgb_white_balance(self) -> tuple[int, int, int]:
+    def rgb_white_balance(self) -> RawRGBColor:
         """
         perfect white surface in front of the sensor for calibration
         
         returned intensities are raw reflected light intensities [0 - 1024]
         
-        uses modes EV3-Color-Color or NXT-Color-Color
+        uses mode EV3-Color-Color, does not work with NXT-Color-Color
         """
         if self.sensors_as_dict[self._port] != EV3_COLOR:
             raise SensorError('rgb works only with EV3 color sensor')
@@ -250,12 +271,16 @@ class Color(EV3):
         return self._rgb_white_balance_raw
     
     @rgb_white_balance.setter
-    def rgb_white_balance(self, raw):
+    def rgb_white_balance(self, raw: Iterable):
         if self.sensors_as_dict[self._port] != EV3_COLOR:
             raise SensorError('rgb works only with EV3 color sensor')
-        assert len(raw) == 3, "white_balance takes exactly 3 items"
+        assert isinstance(raw, Iterable) and len(raw) == 3, \
+               "white_balance takes exactly 3 color values"
         for val in (raw):
             assert isinstance(val, Number), "white_balance must be 3 numbers"
             assert 0 <= val <= 1024, "values must be in range [0 - 1024]"
-        self._rgb_white_balance_raw = tuple(raw)
+        if isinstance(raw, RawRGBColor):
+            self._rgb_white_balance_raw = raw
+        else:
+            self._rgb_white_balance_raw = RawRGBColor(*raw)
         
