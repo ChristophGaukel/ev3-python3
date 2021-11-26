@@ -18,7 +18,7 @@ from .functions import (
 from .ev3 import EV3
 
 # subclasses of EV3
-from .color import Color
+from .color import Color, RGBColor, RawRGBColor
 from .file import FileSystem
 from .motor import Motor
 from .sound import (

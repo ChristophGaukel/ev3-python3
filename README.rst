@@ -71,7 +71,6 @@ executes the program and the EV3 device) and replace the MAC-address
   13:05:11.324701 Sent 0x|0E:00|2A:00|80|00:00|94:01:01:82:B8:01:82:E8:03|
 
 Some remarks:
-
   - Protocol ``USB`` replies all requests to provide
     collisions. Protocol ``BLUETOOTH`` is much slower and replies only
     requests, which demand it.
@@ -138,8 +137,8 @@ like `Touch
 or `Voice
 <https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#voice>`_
 handle sensors, motors, sound or text to speech. You can use multiple
-of these objects parallel and all them can share a single physical EV3
-device. You can also build complex robots with more than one EV3
+of these objects parallel and all of them can share a single physical
+EV3 device. You can also build complex robots with more than one EV3
 device and control these robots easily by a single python program.
 
 ::
@@ -173,10 +172,10 @@ Some remarks:
   - touch_4 and voice use the connection of touch_1. This is done by setting
     keyword argument ``ev3_obj=touch_1``.
   - If you have more than a single EV3 device connected via USB, this
-    program will fail. This special case needs keyword argument host,
-    e.g. ``ev3.Touch(ev3.PORT_1, protocol=ev3.USB,
-    host='00:16:53:42:2B:99')``, to identify the device (for protocol
-    BLUETOOTH keyword argument host is mandatory).
+    program will fail. To handle this special case identify the device
+    by using keyword argument host, e.g. ``ev3.Touch(ev3.PORT_1,
+    protocol=ev3.USB, host='00:16:53:42:2B:99')``. For protocol
+    BLUETOOTH keyword argument host is mandatory.
   - Method ``speak()`` returns a thread_task.Task object, which we
     start threadless.
   - This program depends on the tool `ffmpeg <https://ffmpeg.org/>`_
