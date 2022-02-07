@@ -109,7 +109,7 @@ class Gyro(EV3):
         return self.sensors_as_dict[self._port]
 
     @property
-    def angle(self) -> float:
+    def angle(self) -> int:
         """
         angle measured by sensor
         """
