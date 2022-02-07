@@ -2,7 +2,7 @@
 '''
 LEGO EV3 direct commands
 '''
-
+print("This is Jamins local copy of EV3DC")
 from .constants import *
 from .exceptions import DirCmdError, SysCmdError
 from .functions import (
@@ -34,6 +34,7 @@ from .sound import (
 from .touch import Touch
 from .infrared import Infrared
 from .ultrasonic import Ultrasonic
+from .gyro import Gyro
 from .vehicle import (
         TwoWheelVehicle,
         VehiclePosition,
