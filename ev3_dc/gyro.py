@@ -19,7 +19,7 @@ from .exceptions import SensorError, PortInUse
 
 class Gyro(EV3):
     """
-    controls a single gyro sensor in cm mode
+    controls a single gyro sensor
     """
 
     def __init__(
