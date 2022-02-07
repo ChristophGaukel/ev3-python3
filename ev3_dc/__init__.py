@@ -2,7 +2,7 @@
 '''
 LEGO EV3 direct commands
 '''
-print("This is Jamins local copy of EV3DC")
+
 from .constants import *
 from .exceptions import DirCmdError, SysCmdError
 from .functions import (
