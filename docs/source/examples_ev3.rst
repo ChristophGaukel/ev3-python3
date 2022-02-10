@@ -202,7 +202,7 @@ and this is *USB*, you have no wireless connection, which is a
 restriction. If you have more than one option, you are lucky. *USB* is
 fast connected and fast in data transfer. When you start your EV3
 device, *USB* is ready without any coupling. I prefer it for
-developping.
+developing.
 
 
 ++++++++++++++++
