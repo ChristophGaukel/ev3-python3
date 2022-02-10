@@ -1,5 +1,5 @@
 ----------
-Ultrasonic
+Gyro
 ----------
 
 Class :py:class:`~ev3_dc.Gyro` is a subclass of
