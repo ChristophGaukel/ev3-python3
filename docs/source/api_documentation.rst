@@ -129,6 +129,16 @@ NXT-Color. It uses modes *EV3-Color-Reflected*,
 
 .. autoclass:: ev3_dc.Color
    :members:
+      
+
+Gyro
+~~~~
+
+Gyro is a subclass of EV3 and allows to read data from a
+gyro sensor (EV3-Gyro). It uses mode *EV3-Gyro-Angle*.
+
+.. autoclass:: ev3_dc.Gyro
+   :members:
 
 
 Sound

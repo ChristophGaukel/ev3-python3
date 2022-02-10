@@ -10,6 +10,7 @@ Examples
    examples_infrared
    examples_ultrasonic
    examples_color
+   examples_gyro
    examples_sound
    examples_jukebox
    examples_voice
