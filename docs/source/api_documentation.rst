@@ -135,7 +135,7 @@ Gyro
 ~~~~
 
 Gyro is a subclass of EV3 and allows to read data from a
-gyro sensor (EV3-Gyro). It uses mode *EV3-Gyro-Angle*.
+gyro sensor (EV3-Gyro). It uses mode *EV3-Gyro-Rate & Angle*.
 
 .. autoclass:: ev3_dc.Gyro
    :members:

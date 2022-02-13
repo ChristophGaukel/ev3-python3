@@ -3,6 +3,7 @@ LEGO Mindstorms EV3 direct commands - gyro
 """
 
 import struct
+from collections import namedtuple
 from .ev3 import EV3
 from .constants import (
     PORT_1,
@@ -15,6 +16,11 @@ from .constants import (
 )
 from .functions import LCX, GVX
 from .exceptions import SensorError, PortInUse
+    
+GyroState = namedtuple('GyroState', [
+        'angle',
+        'rate'
+])
 
 
 class Gyro(EV3):
@@ -70,6 +76,11 @@ class Gyro(EV3):
             host_str = self._physical_ev3._host
             raise PortInUse(f'{port_str} of {host_str} already in use')
         
+        # current angle is defined to be angle 0
+        self._offset = 0
+        self._offset = self.angle
+
+        
     def __str__(self):
         """description of the object in a str context"""
         type_str = 'EV3_GYRO'
@@ -111,7 +122,21 @@ class Gyro(EV3):
     @property
     def angle(self) -> int:
         """
-        angle measured by sensor
+        angle [degree] measured by gyro sensor
+        """
+        return self.state.angle
+
+    @property
+    def rate(self) -> int:
+        """
+        rate [degree/second] measured by gyro sensor
+        """
+        return self.state.rate
+
+    @property
+    def state(self) -> GyroState:
+        """
+        angle [degree] and rate [degree/second] measured by gyro sensor        
         """
 
         reply = self.send_direct_cmd(
@@ -121,11 +146,30 @@ class Gyro(EV3):
                     LCX(0),  # LAYER
                     self._port,  # NO
                     LCX(self.sensors_as_dict[self._port]),  # TYPE
-                    LCX(0),  # MODE
-                    LCX(1),  # VALUES
-                    GVX(0)  # VALUE1 (output)
+                    LCX(3),  # MODE
+                    LCX(2),  # VALUES
+                    GVX(0),  # VALUE1 (output)
+                    GVX(4)  # VALUE2 (output)
                 )),
-                global_mem=4
+                global_mem=8
         )
-        angle = struct.unpack('<i', reply)[0]
-        return angle
+        angle, rate = struct.unpack('<2i', reply)
+        return GyroState(angle - self._offset, rate)
+
+    def reset(self, angle=0) -> int:
+        """
+        define current angle to be angle 0 (or another given value)
+
+        Optional keyword only arguments
+
+          angle
+            sets the current angle to this value
+            
+        Returns
+        
+            current angle in previous normalization
+        """
+        cur_angle = self.angle
+        self._offset += cur_angle - angle
+        
+        return cur_angle

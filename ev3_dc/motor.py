@@ -450,7 +450,7 @@ class Motor(EV3):
         stops the current motor movement, with or without brake
         (can be used to release brake)
 
-        Optional keyword arguments
+        Optional keyword only arguments
 
           brake
             flag if stopping with active brake
