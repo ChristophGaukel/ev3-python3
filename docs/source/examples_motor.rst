@@ -26,8 +26,8 @@ Read only property :py:attr:`~ev3_dc.Motor.busy` tells if the motor
 currently is busy, which means, it is actively moving.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.            
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -35,8 +35,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99',
+      protocol=ev3.USB
   ) as my_motor:
       if my_motor.busy:
           print('the motor currently is busy')
@@ -52,8 +51,8 @@ type of the motor. The values may be 7 (ev3_dc.EV3_LARGE_MOTOR) or 8
 (ev3_dc.EV3_MEDIUM_MOTOR).
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.            
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -61,8 +60,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       print(f'the motor type: {my_motor.motor_type}')
 
@@ -76,8 +74,8 @@ which this motor is connected. The values may be 1 (ev3_dc.PORT_A), 2
 (ev3_dc.PORT_B), 3 (ev3_dc.PORT_C) or 4 (ev3_dc.PORT_D).
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.            
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -85,8 +83,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       print(f'the port, where this motor is connected to: {my_motor.port}')
 
@@ -99,8 +96,8 @@ position [degree]. After creating a new object of class *Motor*, its
 *position* is *0°*. This is independent from the motor's history.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -109,8 +106,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       print('please move the motor manually (you have 5 sec. of time)')
       sleep(5)
@@ -123,8 +119,8 @@ above, this also is done, whenever a new instance of class *Motor* is
 instantiated.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.            
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -133,8 +129,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       print('please move the motor manually (you have 5 sec. of time)')
       sleep(5)
@@ -156,8 +151,8 @@ new *Motor* object, you can also change this value, whenever you need
 higher precision or whenever you need to reduce the data traffic.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.            
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -166,8 +161,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       print(f'the default value of delta_time is: {my_motor.delta_time} sec.')
       sleep(5)
@@ -183,8 +177,8 @@ Property :py:attr:`~ev3_dc.Motor.speed` and measures in percent and
 sets the speed of this motor's movements.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.            
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -193,8 +187,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99',
+      protocol=ev3.USB
       speed=100
   ) as my_motor:
       print(f'speed: {my_motor.speed}%')
@@ -215,8 +208,8 @@ you double the speed, you should multiply ramp_up and ramp_down by a
 factor four.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.            
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -224,8 +217,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       print(
           f'defaults of speed: {my_motor.speed}%, ' +
@@ -252,14 +244,15 @@ ramp_up_time and ramp_down_time
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Properties :py:attr:`~ev3_dc.Motor.ramp_up_time` and
-:py:attr:`~ev3_dc.Motor.ramp_down_time` measure in seconds and adjust the
-smoothness of timed movements. As before, the higher the speed is, the higher these
-values should be. But here the relationship is linear. This says: if
-you double the speed, you should also double ramp_up_time and ramp_down_time.
+:py:attr:`~ev3_dc.Motor.ramp_down_time` measure in seconds and adjust
+the smoothness of timed movements. As before, the higher the speed is,
+the higher these values should be. But here the relationship is
+linear. This says: if you double the speed, you should also double
+ramp_up_time and ramp_down_time.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.            
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -267,8 +260,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       print(
           f'defaults of speed: {my_motor.speed} %, ' +
@@ -296,8 +288,8 @@ such *Task* objects with other *Task* objects just like you combine
 LEGO bricks.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.
+Connect a motor (medium or large) with PORT B, then start this
+program.
             
 
 .. code:: python3
@@ -307,8 +299,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       movement_plan = (
           my_motor.move_to(360) +
@@ -364,8 +355,7 @@ We modify this program:
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       movement_plan = (
           my_motor.move_to(360) +
@@ -395,8 +385,8 @@ angle. The API is very similar to method
 :py:meth:`~ev3_dc.Motor.move_to`.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -404,8 +394,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       (
           my_motor.move_by(360, brake=True) +
@@ -433,8 +422,7 @@ backwards.
   
   my_motor = ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   )
   my_jukebox = ev3.Jukebox(ev3_obj=my_motor)
   
@@ -484,8 +472,8 @@ undetermined time and the program can't subsequently follow with the
 next action.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -494,8 +482,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   my_motor = ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   )
   
   my_motor.start_move_to(90)
@@ -531,8 +518,8 @@ time control. A program, which needs to know, if the movement still is
 in progress, can use property :py:attr:`~ev3_dc.Motor.busy`. 
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -541,8 +528,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       my_motor.start_move_by(360, brake=False)
       print('movement has been started')
@@ -571,8 +557,8 @@ object. It does not set the angle of a movement. Instead it sets its
 duration. The name is meant as: move for a defined duration.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.
+Connect a motor (medium or large) with PORT B, then start this
+program.
             
 
 .. code:: python3
@@ -582,8 +568,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       t = my_motor.move_for(
           3,
@@ -610,7 +595,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
 Some remarks:
 
-- As in some examples before, this program schedules two movements,
+- As in some examples above, this program schedules two movements,
   forwards and backwards.
 - After two seconds, during the first movement, task t is stopped and
   continued three seconds later. After the continuation it absolves
@@ -629,8 +614,8 @@ and does not return a `thread_task.Task
 object.
 
 Take an USB cable and connect your EV3 brick with your computer.
-Replace the MAC-address by the one of your EV3 brick, connect a motor
-(medium or large) with PORT B, then start this program.
+Connect a motor (medium or large) with PORT B, then start this
+program.
 
 .. code:: python3
 
@@ -639,8 +624,7 @@ Replace the MAC-address by the one of your EV3 brick, connect a motor
   
   with ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   ) as my_motor:
       my_motor.start_move_for(
           3,
@@ -660,9 +644,8 @@ until something interrupts or stops it. If you like to do so, use
 methods :py:meth:`~ev3_dc.Motor.start_move` and
 :py:meth:`~ev3_dc.Motor.stop`.
 
-Connect your EV3 brick with your computer via USB, replace the
-MAC-address by the one of your EV3 brick, connect a motor (medium or
-large) with PORT B, then start this program.
+Connect your EV3 brick with your computer via USB, connect a motor
+(medium or large) with PORT B, then start this program.
 
 .. code:: python3
 
@@ -671,8 +654,7 @@ large) with PORT B, then start this program.
   
   my_motor = ev3.Motor(
       ev3.PORT_B,
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
+      protocol=ev3.USB
   )
   my_motor.verbosity = 1
   my_motor.sync_mode = ev3.STD

@@ -626,7 +626,7 @@ class Jukebox(Sound):
           volume
             sound volume [%], values from 0 to 100
           temperament
-            temperament of the tones (delfault: 440 Hz)
+            temperament of the tones (default: 440 Hz)
           verbosity
             level (0, 1, 2) of verbosity (prints on stdout).
         """
@@ -667,7 +667,7 @@ class Jukebox(Sound):
     @property
     def temperament(self):
         """
-        temperament of the tones (delfault: 440 Hz)
+        temperament of the tones (default: 440 Hz)
         """
         return self._temperament
 

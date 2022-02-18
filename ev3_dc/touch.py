@@ -106,9 +106,10 @@ class Touch(EV3):
         """
         handle specific logic for deletion
         """
-        self._physical_ev3._introspection["sensors"] \
-            [self._port]['used_by'] = None
-        super().__del__()
+        if self._physical_ev3 is not None:
+            self._physical_ev3._introspection["sensors"] \
+                [self._port]['used_by'] = None
+            super().__del__()
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         """

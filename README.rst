@@ -128,6 +128,8 @@ like `Touch
 <https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#ultrasonic>`_,
 `Color
 <https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#color>`_,
+`Gyro
+<https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#gyro>`_,
 `Motor
 <https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#motor>`_,
 `TwoWheelVehicle
@@ -163,9 +165,8 @@ device and control these robots easily by a single python program.
       voice.speak(txt).start(thread=False)
   
 Some remarks:
-  - You need to connect two touch sensors, one at port 1, the
-    other at port 4 and you need to connect your EV3 device and
-    your computer with an USB cable.
+  - Connect two touch sensors, one at port 1, the other at port 4 and
+    connect your EV3 device and your computer with an USB cable.
   - Class `EV3
     <https://ev3-dc.readthedocs.io/en/latest/api_documentation.html#ev3>`_
     and all its subclasses support the with statement.
