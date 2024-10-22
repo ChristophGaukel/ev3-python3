@@ -183,4 +183,4 @@ Some remarks:
     and you need to have it installed on your computer.
 
 Read `ev3-dc.readthedocs.io
-<https://ev3_dc.readthedocs.io/en/latest/>`_ for more details.
+<https://ev3-dc.readthedocs.io/en/latest/>`_ for more details.

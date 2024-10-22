@@ -391,14 +391,13 @@ sensors
 Property :py:attr:`~ev3_dc.EV3.sensors` informs about the sensor types
 (motors also are sensors), which are connected to the EV3 brick.
 
-Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
-device, select the protocol you prefer, then start this program:
+Select the protocol you prefer, then start this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
 
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       print(my_ev3.sensors)
 
 My program's output was:
@@ -437,14 +436,13 @@ sensors_as_dict
 Property :py:attr:`~ev3_dc.EV3.sensors_as_dict` provides the same information as property *sensors* but
 presents it in a form, which supports automatic handling.
 
-Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
-device, select the protocol you prefer, then start this program:
+Select the protocol you prefer, then start this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
   
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       sensors = my_ev3.sensors_as_dict
   
       assert sensors[ev3.PORT_1] == ev3.EV3_TOUCH, \
@@ -574,14 +572,13 @@ memory
 Property :py:attr:`~ev3_dc.EV3.memory` informs about EV3's memory
 space. 
 
-Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
-device, select the protocol you prefer, then start this program:
+Select the protocol you prefer, then start this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
 
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       print(f'{my_ev3.memory.free} of {my_ev3.memory.total} kB memory are free')
 
 My program's output was:
@@ -605,14 +602,13 @@ the situation, when you call a function or method, which you did not
 code and it returns an EV3 instance. Maybe you want to know, how this
 instance is connected.
 
-Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
-device, select the protocol you prefer, then start this program:
+Select the protocol you prefer, then start this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
 
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       print(f'this EV3 device is connected via {my_ev3.protocol}')
 
 This program's output:
@@ -629,14 +625,13 @@ Property :py:attr:`~ev3_dc.EV3.host` tells the `MAC-address
 <https://en.wikipedia.org/wiki/MAC_address>`_ of the EV3 device. As
 above this is thought for EV3 instances, you got from somewhere.
 
-Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
-device, select the protocol you prefer, then start this program:
+Select the protocol you prefer, then start this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
 
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       print(f'{my_ev3.host} is the MAC-address of this EV3 device')
 
 This program's output:
@@ -653,14 +648,13 @@ Setting property :py:attr:`~ev3_dc.EV3.verbosity` to a value greater
 than zero allows to see the communication data between the program and
 the connected EV3 device.
 
-Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
-device, select the protocol you prefer, then start this program:
+Select the protocol you prefer, then start this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
 
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       my_ev3.verbosity = 1
       bat = my_ev3.battery
 
@@ -698,14 +692,13 @@ continue with processing until the response is needed and then
 wait and get it. The third value *STD* will only wait for replies, if the direct
 command returns data.
 
-Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
-device, select the protocol you prefer, then start this program:
+Select the protocol you prefer, then start this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
   
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       print(f"protocol USB's default sync_mode is {my_ev3.sync_mode}")
       my_ev3.name = 'Evelyn'
       my_ev3.verbosity = 1
@@ -737,7 +730,7 @@ Now let's change the program and explicitly set *sync_mode = STD*:
 
   import ev3_dc as ev3
   
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       print(f"protocol USB's default sync_mode is {my_ev3.sync_mode}")
       my_ev3.name = 'Evelyn'
       my_ev3.sync_mode = ev3.STD
@@ -771,14 +764,13 @@ The art of doing nothing
 
 We send the idle operation of the EV3 device to test the communication speed.
 
-Replace MAC-address ``00:16:53:42:2B:99`` with the one of your EV3
-device, then run this program:
+Connect your computer and your EV3 device with an USB cable, then run this program:
 
 .. code:: python3
 
   import ev3_dc as ev3
 
-  with ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99') as my_ev3:
+  with ev3.EV3(protocol=ev3.USB) as my_ev3:
       my_ev3.verbosity = 1
       my_ev3.sync_mode = ev3.SYNC
       ops = ev3.opNop
@@ -876,9 +868,7 @@ opUI_Write = 0x|82| with CMD LED = 0x|1B| needs one argument:
 
   - PATTERN: GREEN = 0x|01|, RED = 0x|02|, etc.
 
-Take an USB cable and connect your EV3 brick
-with your computer. Replace the
-MAC-address by the one of your EV3 brick, then
+Take an USB cable and connect your EV3 brick with your computer, then
 start the program.
 
 .. code:: python3
@@ -886,7 +876,7 @@ start the program.
   import ev3_dc as ev3
   from time import sleep
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   ops = b''.join((
@@ -1049,16 +1039,14 @@ will show, that the program has been started.
 Playing Sound Files
 -------------------
 
-Take an USB cable and connect your EV3 brick
-with your computer. Replace the
-MAC-address by the one of your EV3 brick, then
+Take an USB cable and connect your EV3 brick with your computer, then
 start the program.
 
 .. code:: python3
 
   import ev3_dc as ev3
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   ops = b''.join((
@@ -1090,16 +1078,15 @@ the direct command was replied.
 Playing Sound Files repeatedly
 ------------------------------
 
-As above, take an USB cable, connect your EV3 brick with your computer
-and replace MAC-address by the one of your EV3 brick, then start
-this program.
+As above, take an USB cable, connect your EV3 brick with your
+computer, then start this program.
 
 .. code:: python3
 
   import ev3_dc as ev3
   import time
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   ops = b''.join((
@@ -1148,7 +1135,7 @@ of four tones:
 
   import ev3_dc as ev3
 
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   
   ops = b''.join((
       ev3.opSound,  # operation
@@ -1220,7 +1207,7 @@ The program:
 
   import ev3_dc as ev3
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   
   ops = b''.join((
       ev3.opUI_Draw,
@@ -1293,7 +1280,7 @@ command. We change the program:
   import ev3_dc as ev3
   from time import sleep
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   
   ops = b''.join((
       ev3.opUI_Draw,
@@ -1388,7 +1375,7 @@ The program:
 
   import ev3_dc as ev3
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   
   ops = b''.join((
       ev3.opUI_Button,  # operation
@@ -1470,16 +1457,15 @@ There is an operation, that asks for the type and mode of a sensor at a specifie
 
 Please connect some sensors to your sensor ports and some motors to
 your motor ports. Then connect your EV3 brick and your computer with
-an USB cable. Replace MAC-address by the one of your EV3 brick.
-The following program sends two direct commands, the first asks for
-the sensors, the second for the motors.
+an USB cable.  The following program sends two direct commands, the
+first asks for the sensors, the second for the motors.
 
 .. code:: python3
 
   import ev3_dc as ev3
   import struct
   
-  my_ev3 = ev3.EV3(protocol=ev3.USB, host='00:16:53:42:2B:99')
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   
@@ -2664,9 +2650,7 @@ Moving a motor to a Specified Position
 --------------------------------------
 
 Connect your EV3 medium motor with port B, connect your computer and
-your EV3 brick with an USB cable, replace MAC-address
-``00:16:53:42:2B:99`` with the one of your EV3 brick, then run this
-program:
+your EV3 brick with an USB cable, then run this program:
 
 .. code:: python3
 
@@ -2675,10 +2659,7 @@ program:
   from math import copysign
   
   
-  my_ev3 = ev3.EV3(
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
-  )
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   speed = 10
@@ -2751,10 +2732,7 @@ that does the same thing.
   import ev3_dc as ev3
   
   
-  my_ev3 = ev3.EV3(
-      protocol=ev3.USB,
-      host='00:16:53:42:2B:99'
-  )
+  my_ev3 = ev3.EV3(protocol=ev3.USB)
   my_ev3.verbosity = 1
   
   speed = 10
